@@ -19,6 +19,7 @@ export interface Profile {
   mobile: string;
   role: UserRole;
   drive_link?: string;
+  drive_link_v2?: string; // المجلد التحسيني
   created_at: string;
 }
 

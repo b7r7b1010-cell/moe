@@ -5,7 +5,7 @@ import { CRITERIA_MAP } from '../constants';
 import { supabase } from '../supabase';
 import { 
   X, Save, ExternalLink, 
-  Award, Lightbulb, Info
+  Award, Lightbulb, Info, Sparkles, FileText
 } from 'lucide-react';
 
 interface Props {
@@ -56,22 +56,26 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
     Object.entries(ratings).forEach(([id, rating]) => {
       total += calculateScoreForCriterion(Number(id), rating as number);
     });
-    return Math.min(100, Math.round(total * 10) / 10);
+    return Math.min(100, Math.round(total));
   };
 
   const getGradeInfo = (score: number) => {
-    const ratingFromFive = (score / 20).toFixed(1);
-    if (score >= 90) return { label: 'ممتاز', rating: `${ratingFromFive}/5`, color: 'text-emerald-600', bg: 'bg-emerald-600', desc: 'أداء يفوق التوقعات بشكل استثنائي.' };
-    if (score >= 80) return { label: 'جيد جداً', rating: `${ratingFromFive}/5`, color: 'text-blue-600', bg: 'bg-blue-600', desc: 'أداء يتجاوز التوقعات في معظم الأحيان.' };
-    if (score >= 70) return { label: 'جيد', rating: `${ratingFromFive}/5`, color: 'text-amber-600', bg: 'bg-amber-600', desc: 'أداء يلبي التوقعات المطلوبة.' };
-    if (score >= 60) return { label: 'مرضي', rating: `${ratingFromFive}/5`, color: 'text-orange-600', bg: 'bg-orange-600', desc: 'أداء أقل من التوقعات، يحتاج إلى تحسين.' };
-    return { label: 'غير مرضي', rating: `${ratingFromFive}/5`, color: 'text-red-600', bg: 'bg-red-600', desc: 'أداء ضعيف جداً ولا يلبي المعايير الدنيا.' };
+    let points = 1;
+    let label = 'غير مرضي';
+    let color = 'text-red-600';
+
+    if (score >= 90) { points = 5; label = 'ممتاز'; color = 'text-emerald-600'; }
+    else if (score >= 80) { points = 4; label = 'جيد جداً'; color = 'text-blue-600'; }
+    else if (score >= 70) { points = 3; label = 'جيد'; color = 'text-amber-600'; }
+    else if (score >= 60) { points = 2; label = 'مرضي'; color = 'text-orange-600'; }
+
+    return { label, points, color };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (Object.keys(ratings).length < criteria.length) {
-      alert('الرجاء تعبئة كافة بنود التقييم قبل الحفظ');
+      alert('الرجاء تعبئة كافة بنود التقييم');
       return;
     }
     setSubmitting(true);
@@ -107,140 +111,92 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
   const grade = getGradeInfo(totalScore);
 
   return (
-    <div className="fixed inset-0 bg-[#0f4c4c]/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-[1300px] max-h-[92vh] rounded-[3rem] overflow-hidden flex flex-col shadow-2xl">
+    <div className="fixed inset-0 bg-[#0f4c4c]/90 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-[1300px] h-[92vh] rounded-[3.5rem] overflow-hidden flex flex-col shadow-2xl">
         
-        <div className="bg-[#0f4c4c] p-6 text-white flex justify-between items-center">
-          <div className="flex items-center gap-6">
-            <button onClick={onClose} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all">
+        <div className="bg-[#0f4c4c] p-8 text-white flex justify-between items-center border-b-4 border-[#00a18e]">
+          <div className="flex items-center gap-8">
+            <button onClick={onClose} className="p-4 bg-white/10 hover:bg-red-500 rounded-3xl transition-all">
               <X className="w-6 h-6" />
             </button>
-            <div className="text-right">
-              <h2 className="text-xl font-black">نموذج تقييم أداء {staff.role}</h2>
-              <p className="text-xs opacity-70 font-bold">{staff.full_name}</p>
+            <div>
+              <h2 className="text-2xl font-black">تقييم أداء: {staff.full_name}</h2>
+              <p className="text-xs opacity-70 font-bold uppercase tracking-widest">{staff.role}</p>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
+            {/* عرض روابط الشواهد بشكل واضح */}
             {staff.drive_link && (
-              <a href={staff.drive_link} target="_blank" className="bg-[#00a18e] text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center gap-2 hover:scale-105 transition-all">
-                <ExternalLink className="w-4 h-4" /> فحص الشواهد
+              <a href={staff.drive_link} target="_blank" className="bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center gap-2 hover:bg-black transition-all">
+                <FileText className="w-4 h-4" /> المجلد الأساسي
               </a>
             )}
-            <div className="bg-white/10 px-6 py-2 rounded-2xl border border-white/20">
-               <span className="text-xs font-bold ml-2">إجمالي الأداء:</span>
-               <span className="text-xl font-black">{totalScore}%</span>
+            {staff.drive_link_v2 && (
+              <a href={staff.drive_link_v2} target="_blank" className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black text-xs flex items-center gap-2 hover:bg-emerald-700 transition-all ring-4 ring-emerald-500/20">
+                <Sparkles className="w-4 h-4" /> مجلد التحسين (المُراجَع)
+              </a>
+            )}
+            <div className="bg-white/10 px-8 py-2 rounded-2xl border border-white/20">
+               <span className="text-4xl font-black">{grade.points}</span>
+               <span className="text-xs font-bold mr-2 opacity-50">/ 5</span>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-          <div className="flex-1 overflow-auto bg-slate-50">
-            <table className="w-full text-right border-collapse">
-              <thead className="sticky top-0 z-10 shadow-sm">
-                <tr className="bg-[#1a3a3a] text-white">
-                  <th className="px-6 py-4 text-sm font-black border-l border-white/10">عناصر التقييم</th>
-                  <th className="px-6 py-4 text-sm font-black border-l border-white/10 w-32 text-center">الوزن النسبي</th>
-                  <th className="px-6 py-4 text-sm font-black w-72 text-center">سلم التقدير (1-5)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {criteria.map((c, idx) => {
-                  const isLightRow = idx < 3 || (staff.role === UserRole.TEACHER && idx < 3);
-                  const rowBg = isLightRow ? 'bg-[#e0f2f1]' : 'bg-white';
-                  const rating = ratings[c.id];
-
-                  return (
-                    <tr key={c.id} className={`${rowBg} border-b border-slate-100 transition-colors hover:bg-slate-100/50`}>
-                      <td className="px-6 py-5 font-bold text-slate-700 text-sm leading-snug">
-                        {idx + 1}. {c.text}
-                      </td>
-                      <td className="px-6 py-5 text-center font-black text-[#0f4c4c] text-sm">
-                        %{c.weight}
-                      </td>
-                      <td className="px-6 py-5">
-                        <div className="flex justify-center gap-2" dir="ltr">
-                          {[1, 2, 3, 4, 5].map((num) => (
-                            <button
-                              key={num}
-                              type="button"
-                              onClick={() => setRatings({ ...ratings, [c.id]: num })}
-                              className={`w-10 h-10 rounded-xl font-black text-xs transition-all border-2 flex items-center justify-center
-                                ${rating === num 
-                                  ? 'bg-[#0f4c4c] text-white border-[#0f4c4c] scale-110 shadow-lg shadow-teal-900/20' 
-                                  : 'bg-white text-slate-400 border-slate-200 hover:border-[#0f4c4c] hover:text-[#0f4c4c]'}`}
-                            >
-                              {num}
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="w-full md:w-96 bg-white border-r border-slate-100 p-8 flex flex-col gap-6 shadow-inner overflow-auto">
-            
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 text-[#0f4c4c]">
-                 <Award className="w-6 h-6" />
-                 <h3 className="font-black text-lg">التقدير العام للأداء</h3>
-              </div>
-              
-              <div className={`p-6 rounded-[2rem] bg-slate-50 border-2 border-slate-100 flex flex-col items-center gap-4 text-center`}>
-                <div className="relative w-24 h-24 flex items-center justify-center">
-                   <svg className="w-full h-full -rotate-90">
-                      <circle cx="48" cy="48" r="42" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-100" />
-                      <circle cx="48" cy="48" r="42" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={264} strokeDashoffset={264 - (264 * totalScore) / 100} className={`${grade.color.replace('text-', 'stroke-')} transition-all duration-1000`} strokeLinecap="round" />
-                   </svg>
-                   <span className={`absolute inset-0 flex flex-col items-center justify-center text-[#0f4c4c]`}>
-                      <span className="text-2xl font-black">{totalScore}</span>
-                      <span className="text-[10px] font-bold opacity-40">%</span>
-                   </span>
-                </div>
-                <div>
-                   <h4 className={`text-xl font-black ${grade.color}`}>{grade.label}</h4>
-                   <p className="text-slate-400 text-[10px] font-bold mt-1 tracking-widest uppercase">{grade.rating}</p>
-                </div>
-                <div className="bg-white p-3 rounded-xl border border-slate-100 text-[10px] font-bold text-slate-500 leading-relaxed italic">
-                   "{grade.desc}"
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-               <label className="flex items-center gap-3 font-black text-slate-600 text-sm">
-                  <Lightbulb className="w-5 h-5 text-[#0f4c4c]" /> التوجيهات والتوصيات
-               </label>
-               <textarea
-                 className="w-full px-6 py-4 rounded-2xl border border-slate-200 focus:border-[#0f4c4c] outline-none h-44 resize-none bg-slate-50 text-xs shadow-inner transition-all font-bold"
-                 placeholder="اكتب توجيهاتك الفنية للموظف..."
-                 value={comments}
-                 onChange={(e) => setComments(e.target.value)}
-               ></textarea>
-            </div>
-
-            <div className="bg-[#0f4c4c]/5 p-4 rounded-2xl border border-[#0f4c4c]/10 flex items-start gap-3">
-               <Info className="w-4 h-4 text-[#0f4c4c] mt-0.5" />
-               <p className="text-[9px] text-[#0f4c4c] font-black leading-relaxed">
-                  سيتم عرض التقدير والوصف الوظيفي للمعلم في لوحته الرقمية فور الاعتماد.
-               </p>
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 overflow-auto p-8 bg-slate-50">
+            <div className="bg-white rounded-[2.5rem] shadow-sm overflow-hidden border border-slate-200">
+               <table className="w-full text-right">
+                 <thead>
+                   <tr className="bg-[#1a3a3a] text-white">
+                     <th className="px-8 py-5 text-sm font-black">المعيار الوظيفي</th>
+                     <th className="px-8 py-5 text-sm font-black text-center w-32">الوزن</th>
+                     <th className="px-8 py-5 text-sm font-black text-center w-80">الدرجة (1-5)</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {criteria.map((c, idx) => (
+                     <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                       <td className="px-8 py-5 font-bold text-slate-700">{idx + 1}. {c.text}</td>
+                       <td className="px-8 py-5 text-center font-black text-[#0f4c4c]">{c.weight}</td>
+                       <td className="px-8 py-5">
+                         <div className="flex justify-center gap-2" dir="ltr">
+                           {[1, 2, 3, 4, 5].map((n) => (
+                             <button key={n} type="button" onClick={() => setRatings({ ...ratings, [c.id]: n })} className={`w-10 h-10 rounded-xl font-black text-xs transition-all border-2 ${ratings[c.id] === n ? 'bg-[#0f4c4c] text-white border-[#0f4c4c] scale-110' : 'bg-white text-slate-300 border-slate-100 hover:border-slate-300'}`}>
+                               {n}
+                             </button>
+                           ))}
+                         </div>
+                       </td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
             </div>
           </div>
-        </div>
 
-        <div className="p-8 border-t bg-white flex justify-center">
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="w-full md:w-auto bg-[#0f4c4c] text-white px-20 py-5 rounded-[2rem] font-black text-xl shadow-2xl hover:bg-[#0d3d3d] active:scale-[0.98] transition-all flex items-center justify-center gap-4 disabled:opacity-50"
-          >
-            {submitting ? 'جاري الاعتماد...' : 'اعتماد التقييم النهائي'}
-            {!submitting && <Save className="w-6 h-6" />}
-          </button>
+          <div className="w-[400px] bg-white border-r border-slate-200 p-10 flex flex-col gap-8 shadow-inner">
+             <div className="text-center p-8 bg-slate-50 rounded-[3rem] border-2 border-slate-100">
+                <p className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest">مؤشر النتيجة النهائية</p>
+                <div className="text-7xl font-black text-[#0f4c4c] mb-2">{totalScore} <span className="text-xl opacity-30">%</span></div>
+                <div className={`text-2xl font-black ${grade.color}`}>{grade.label}</div>
+                <div className="mt-4 bg-[#0f4c4c] text-white inline-block px-6 py-1 rounded-full text-xs font-black">
+                   النقاط: {grade.points} من 5
+                </div>
+             </div>
+
+             <div className="space-y-4">
+                <label className="font-black text-slate-600 text-sm flex items-center gap-2">
+                   <Lightbulb className="w-5 h-5 text-emerald-500" /> التوصيات المهنية (تظهر للمعلم)
+                </label>
+                <textarea className="w-full p-6 rounded-[2rem] border-2 border-slate-100 focus:border-[#0f4c4c] outline-none h-48 resize-none bg-slate-50 text-sm font-bold shadow-inner" placeholder="اكتب ملاحظاتك التطويرية هنا..." value={comments} onChange={(e) => setComments(e.target.value)} />
+             </div>
+
+             <button onClick={handleSubmit} disabled={submitting} className="mt-auto w-full bg-[#0f4c4c] text-white py-6 rounded-[2rem] font-black text-xl shadow-2xl hover:bg-black transition-all flex items-center justify-center gap-4">
+                {submitting ? 'جاري الاعتماد...' : 'اعتماد وحفظ النتيجة'} <Save className="w-6 h-6" />
+             </button>
+          </div>
         </div>
       </div>
     </div>
