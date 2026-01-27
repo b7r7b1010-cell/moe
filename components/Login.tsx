@@ -22,7 +22,6 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     { role: UserRole.VICE_PRINCIPAL, icon: Users },
     { role: UserRole.COUNSELOR, icon: ClipboardCheck },
     { role: UserRole.LAB_ASSISTANT, icon: Beaker },
-    { role: UserRole.PRINCIPAL, icon: ShieldCheck },
   ];
 
   const checkConnection = async () => {
@@ -38,7 +37,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mobile.match(/^05\d{8}$/)) {
-      alert('رقم الجوال يجب أن يبدأ بـ 05 ويتكون من 10 أرقام');
+      alert('رقم جوال غير صحيح');
       return;
     }
     setLoading(true);
@@ -46,7 +45,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     try {
       if (isRegistering) {
         if (fullName.trim().split(' ').length < 3) {
-          alert('الرجاء كتابة الاسم الرباعي كاملاً');
+          alert('الرجاء كتابة الاسم الرباعي');
           setLoading(false);
           return;
         }
@@ -54,10 +53,8 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         if (authError) throw authError;
         if (authData.user) {
           await supabase.from('profiles').upsert({ id: authData.user.id, full_name: fullName, mobile: mobile, role: role });
-          if (!authData.session) {
-            alert('تم إنشاء الحساب بنجاح! يرجى تسجيل الدخول.');
-            setIsRegistering(false);
-          } else { onLogin(); }
+          alert('تم إنشاء الحساب بنجاح! يرجى تسجيل الدخول.');
+          setIsRegistering(false);
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email: internalEmail, password });
@@ -65,45 +62,29 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         onLogin();
       }
     } catch (err: any) {
-      if (err.message.includes('fetch')) {
-        alert('❌ فشل الاتصال بالخادم. تأكد من جودة الإنترنت.');
-        setServerStatus('offline');
-      } else { alert('خطأ: ' + err.message); }
+      alert('خطأ: ' + err.message);
     } finally { setLoading(false); }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] p-4 font-cairo text-right" dir="rtl">
-      <div className={`w-full ${isRegistering ? 'max-w-2xl' : 'max-w-md'} bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-slate-200 relative`}>
-        
-        {/* Ministry Official Header */}
-        <div className="bg-[#0f4c4c] p-8 text-white relative">
-          <div className="flex justify-between items-center mb-6">
-            <div className="text-right space-y-1 opacity-90">
-              <p className="text-[10px] font-bold">المملكة العربية السعودية</p>
-              <p className="text-[10px]">وزارة التعليم</p>
-              <p className="text-[10px]">الإدارة العامة للتعليم بمحافظة جدة</p>
-              <p className="text-[12px] font-black border-t border-white/10 mt-1 pt-1 tracking-tight">ثانوية الأمير عبدالمجيد الأولى</p>
+      <div className={`w-full ${isRegistering ? 'max-w-2xl' : 'max-w-md'} bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-slate-200`}>
+        <div className="bg-[#0f4c4c] p-8 text-white">
+          <div className="flex justify-between items-start mb-6">
+            <div className="text-right space-y-0.5 font-cairo opacity-95">
+              <p className="text-[10px] md:text-xs font-bold tracking-tight">المملكة العربية السعودية</p>
+              <p className="text-[10px] md:text-xs font-medium">وزارة التعليم</p>
+              <p className="text-[10px] md:text-xs font-medium">الإدارة العامة للتعليم بمحافظة جدة</p>
+              <p className="text-[12px] md:text-sm font-black border-t border-white/10 mt-2 pt-1">ثانوية الأمير عبدالمجيد الأولى</p>
             </div>
-            <img 
-              src="https://up6.cc/2026/01/176840436497671.png" 
-              className="h-16 md:h-20 object-contain" 
-              alt="Logo" 
-            />
+            <img src="https://up6.cc/2026/01/176840436497671.png" className="h-16 md:h-20 object-contain drop-shadow-lg" alt="Logo" />
           </div>
-          <div className="bg-black/20 py-2.5 px-4 rounded-xl text-center border border-white/10 shadow-inner">
-            <h2 className="text-lg font-black tracking-wide">( بوابة الموظف - نظام إدارة الأداء الوظيفي )</h2>
+          <div className="bg-black/20 py-3 px-4 rounded-xl text-center border border-white/10 shadow-inner">
+            <h2 className="text-lg font-black font-cairo">( نظام إدارة الأداء الوظيفي )</h2>
           </div>
         </div>
         
         <div className="p-8">
-          {serverStatus === 'offline' && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              <p className="text-[10px] text-red-700 font-bold">الخادم غير متصل حالياً، يرجى التحقق من الشبكة.</p>
-            </div>
-          )}
-
           <form onSubmit={handleAuth} className="space-y-4">
             {isRegistering ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -145,12 +126,12 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               </div>
             )}
 
-            <button disabled={loading} type="submit" className="w-full bg-[#0f4c4c] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#0d3d3d] transition-all flex items-center justify-center gap-3 active:scale-95">
-              {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : isRegistering ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+            <button disabled={loading} type="submit" className="w-full bg-[#0f4c4c] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#0d3d3d] transition-all flex items-center justify-center gap-3 active:scale-95 font-cairo">
+              {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
               {isRegistering ? 'إنشاء حساب جديد' : 'دخول النظام'}
             </button>
           </form>
-          <button onClick={() => setIsRegistering(!isRegistering)} className="w-full mt-6 text-[#0f4c4c] font-bold text-xs hover:underline">
+          <button onClick={() => setIsRegistering(!isRegistering)} className="w-full mt-6 text-[#0f4c4c] font-bold text-xs hover:underline font-cairo">
             {isRegistering ? 'لديك حساب؟ سجل دخولك' : 'مستخدم جديد؟ سجل بياناتك الآن'}
           </button>
         </div>

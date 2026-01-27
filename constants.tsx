@@ -31,10 +31,10 @@ export const CRITERIA_MAP: Record<UserRole, Criterion[]> = {
     { id: 205, text: "تحسين نتائج المتعلمين", weight: 10 },
     { id: 206, text: "إعداد وتنفيذ خطة التعلم", weight: 10 },
     { id: 207, text: "توظيف تقنيات ووسائل التعلم المناسبة", weight: 10 },
-    { id: 208, text: "تحليل نتائج المتعلمين وتشخيص مستوياتهم", weight: 10 },
-    { id: 209, text: "تنوع أساليب التقويم", weight: 10 },
-    { id: 210, text: "تهيئة بيئة تعليمية", weight: 5 },
-    { id: 211, text: "الإدارة الصفية", weight: 5 },
+    { id: 208, text: "تهيئة بيئة تعليمية", weight: 5 },
+    { id: 209, text: "الإدارة الصفية", weight: 5 },
+    { id: 210, text: "تحليل نتائج المتعلمين وتشخيص مستوياتهم", weight: 10 },
+    { id: 211, text: "تنوع أساليب التقويم", weight: 10 },
   ],
   [UserRole.COUNSELOR]: [
     { id: 301, text: "أداء الواجبات الوظيفية", weight: 20 },
@@ -48,7 +48,7 @@ export const CRITERIA_MAP: Record<UserRole, Criterion[]> = {
     { id: 309, text: "يقدم التدخلات النفسية والاجتماعية", weight: 10 },
     { id: 310, text: "يساعد المتعلمين على التخطيط المهني والتعليمي", weight: 5 },
     { id: 311, text: "يعزز التفوق الدراسي", weight: 5 },
-    { id: 312, text: "يقدم تدخلات تربوية للمتأخرين دراسيًا والمعيدين", weight: 5 },
+    { id: 312, text: "يقدم تدخلات تربوية للمتأخرين دراسياً والمعيدين", weight: 5 },
     { id: 313, text: "توعية المتعلمين وأولياء أمورهم بقواعد السلوك والمواظبة", weight: 5 },
   ],
   [UserRole.VICE_PRINCIPAL]: [
