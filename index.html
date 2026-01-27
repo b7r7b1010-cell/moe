@@ -32,22 +32,34 @@
       
       @media print {
         @page {
-          size: A4;
-          margin: 10mm;
+          size: A4 portrait;
+          margin: 0;
         }
         body {
           background-color: white !important;
           margin: 0 !important;
           padding: 0 !important;
+          width: 210mm;
+          height: 297mm;
         }
         .no-print {
           display: none !important;
         }
         .printable-document {
           font-family: 'Amiri', serif !important;
-          width: 100% !important;
+          width: 210mm !important;
+          height: 297mm !important;
           box-shadow: none !important;
           border: none !important;
+          margin: 0 !important;
+          padding: 15mm !important;
+          page-break-after: avoid;
+          page-break-before: avoid;
+        }
+        /* Fix for potential horizontal overflow */
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
       }
     </style>

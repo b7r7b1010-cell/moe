@@ -24,73 +24,76 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
   const gradeInfo = getGradeInfo(evaluation.total_score);
 
   return (
-    <div className="bg-white font-official text-slate-900 printable-document min-h-[1050px] p-6" dir="rtl">
-      <div className="flex justify-between items-start mb-10 pb-6 border-b-4 border-[#0f4c4c]">
-        <div className="text-right space-y-1 min-w-[200px]">
-          <p className="text-base font-bold">المملكة العربية السعودية</p>
-          <p className="text-base">وزارة التعليم</p>
-          <p className="text-base">الإدارة العامة للتعليم بمحافظة جدة</p>
-          <p className="text-lg font-black mt-2 text-[#0f4c4c]">ثانوية الأمير عبدالمجيد الأولى</p>
+    <div className="bg-white font-official text-slate-900 printable-document mx-auto" style={{ width: '210mm', minHeight: '297mm', padding: '10mm' }} dir="rtl">
+      {/* Header Section - More Compact */}
+      <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-[#0f4c4c]">
+        <div className="text-right space-y-0.5 min-w-[180px]">
+          <p className="text-sm font-bold">المملكة العربية السعودية</p>
+          <p className="text-sm">وزارة التعليم</p>
+          <p className="text-sm">الإدارة العامة للتعليم بمحافظة جدة</p>
+          <p className="text-base font-black mt-1 text-[#0f4c4c]">ثانوية الأمير عبدالمجيد الأولى</p>
         </div>
-        <div className="text-center flex flex-col items-center">
-           <img src="https://up6.cc/2026/01/176840436497671.png" className="h-28 mb-4 drop-shadow-lg" alt="Logo" />
-           <div className="border-2 border-slate-900 px-12 py-2 rounded-2xl bg-slate-50 shadow-sm">
-             <h2 className="text-2xl md:text-3xl font-black tracking-tight uppercase">بطاقة الأداء الوظيفي</h2>
+        <div className="text-center flex flex-col items-center flex-1">
+           <img src="https://up6.cc/2026/01/176840436497671.png" className="h-20 mb-2" alt="Logo" />
+           <div className="border border-slate-900 px-8 py-1 rounded-xl bg-slate-50 shadow-sm">
+             <h2 className="text-xl font-black tracking-tight uppercase">بطاقة الأداء الوظيفي</h2>
            </div>
         </div>
-        <div className="text-left space-y-1 min-w-[200px]">
-          <p className="text-xs font-sans font-bold">التاريخ: {new Date(evaluation.created_at).toLocaleDateString('ar-SA')}</p>
-          <p className="text-xs font-sans font-bold">العام الدراسي: 1446هـ</p>
-          <p className="text-[10px] font-sans text-slate-400 mt-2 uppercase tracking-widest">REF: {evaluation.id.split('-')[0]}</p>
+        <div className="text-left space-y-0.5 min-w-[180px]">
+          <p className="text-[10px] font-sans font-bold">التاريخ: {new Date(evaluation.created_at).toLocaleDateString('ar-SA')}</p>
+          <p className="text-[10px] font-sans font-bold">العام الدراسي: 1446هـ</p>
+          <p className="text-[9px] font-sans text-slate-400 mt-1 uppercase tracking-widest">DIGITAL ID: {evaluation.id.split('-')[0].toUpperCase()}</p>
         </div>
       </div>
 
-      <div className="flex border-4 border-slate-900 rounded-[2rem] mb-6 overflow-hidden shadow-xl bg-white">
-        <div className="flex-1 p-8 border-l-4 border-slate-900 space-y-5">
+      {/* Info Grid - Fits better */}
+      <div className="flex border-2 border-slate-900 rounded-2xl mb-6 overflow-hidden bg-white">
+        <div className="flex-1 p-5 border-l-2 border-slate-900 space-y-3">
           <div className="flex justify-between items-center">
-            <span className="font-bold text-lg min-w-[120px]">اسم الموظف:</span>
-            <span className="flex-1 border-b-2 border-dotted border-slate-300 mr-6 text-2xl font-black text-[#0f4c4c]">{staff.full_name}</span>
+            <span className="font-bold text-sm min-w-[100px]">اسم الموظف:</span>
+            <span className="flex-1 border-b border-dotted border-slate-300 mr-4 text-lg font-black text-[#0f4c4c]">{staff.full_name}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="font-bold text-lg min-w-[120px]">المسمى المهني:</span>
-            <span className="flex-1 border-b-2 border-dotted border-slate-300 mr-6 text-xl">{staff.role}</span>
+            <span className="font-bold text-sm min-w-[100px]">المسمى المهني:</span>
+            <span className="flex-1 border-b border-dotted border-slate-300 mr-4 text-base">{staff.role}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="font-bold text-lg min-w-[120px]">اسم المقيّم:</span>
-            <span className="flex-1 border-b-2 border-dotted border-slate-300 mr-6 text-xl">{principalName}</span>
+            <span className="font-bold text-sm min-w-[100px]">اسم المقيّم:</span>
+            <span className="flex-1 border-b border-dotted border-slate-300 mr-4 text-base">{principalName}</span>
           </div>
         </div>
-        <div className="w-80 bg-slate-50 flex flex-col items-center justify-center p-8">
-          <span className="text-sm font-black mb-2 text-slate-400 uppercase tracking-widest">الدرجة والتقدير</span>
-          <div className="text-7xl font-black text-slate-900 leading-none font-sans mb-1">{evaluation.total_score}</div>
-          <div className="bg-[#0f4c4c] text-white px-8 py-2 rounded-full text-xl font-black shadow-lg">
+        <div className="w-56 bg-slate-50 flex flex-col items-center justify-center p-4">
+          <span className="text-[10px] font-black mb-1 text-slate-400 uppercase tracking-widest">الدرجة النهائية</span>
+          <div className="text-5xl font-black text-slate-900 leading-none font-sans mb-2">{evaluation.total_score}</div>
+          <div className="bg-[#0f4c4c] text-white px-6 py-1 rounded-full text-sm font-black shadow-md">
             {gradeInfo.label} ({gradeInfo.rating})
           </div>
         </div>
       </div>
 
-      <table className="w-full border-4 border-slate-900 mb-8 shadow-lg">
+      {/* Criteria Table - Reduced padding for A4 */}
+      <table className="w-full border-2 border-slate-900 mb-6 text-sm">
         <thead className="bg-[#0f4c4c] text-white">
-          <tr className="border-b-4 border-slate-900">
-            <th className="p-3 border-l-4 border-slate-900 text-center w-16 text-base">م</th>
-            <th className="p-3 border-l-4 border-slate-900 text-right text-base">عناصر التقييم</th>
-            <th className="p-3 border-l-4 border-slate-900 text-center w-24 text-base">الوزن</th>
-            <th className="p-3 text-center w-48 text-base">سلم التقدير (1-5)</th>
+          <tr className="border-b-2 border-slate-900">
+            <th className="p-2 border-l-2 border-slate-900 text-center w-12 font-black">م</th>
+            <th className="p-2 border-l-2 border-slate-900 text-right font-black">معايير التقييم الفني والتربوي</th>
+            <th className="p-2 border-l-2 border-slate-900 text-center w-20 font-black">الوزن</th>
+            <th className="p-2 text-center w-40 font-black">الدرجة (1-5)</th>
           </tr>
         </thead>
-        <tbody className="divide-y-4 divide-slate-900">
+        <tbody className="divide-y-2 divide-slate-900">
           {criteria.map((c, idx) => {
              const score = evaluation.scores[c.id] || 0;
              const rating = Math.round((score / c.weight) * 5);
              return (
-              <tr key={c.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                <td className="p-3 border-l-4 border-slate-900 text-center text-sm font-bold font-sans">{idx + 1}</td>
-                <td className="p-3 border-l-4 border-slate-900 text-right text-base font-bold pr-4">{c.text}</td>
-                <td className="p-3 border-l-4 border-slate-900 text-center text-sm font-bold font-sans">%{c.weight}</td>
-                <td className="p-3 text-center">
+              <tr key={c.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                <td className="p-1.5 border-l-2 border-slate-900 text-center font-sans font-bold text-xs">{idx + 1}</td>
+                <td className="p-1.5 border-l-2 border-slate-900 text-right font-bold pr-3">{c.text}</td>
+                <td className="p-1.5 border-l-2 border-slate-900 text-center font-sans font-bold text-xs">{c.weight}</td>
+                <td className="p-1.5 text-center">
                   <div className="flex justify-center gap-1" dir="ltr">
                     {[1, 2, 3, 4, 5].map(n => (
-                      <div key={n} className={`w-7 h-7 border-2 border-slate-900 flex items-center justify-center text-xs font-black ${rating === n ? 'bg-[#0f4c4c] text-white' : ''}`}>
+                      <div key={n} className={`w-6 h-6 border border-slate-900 flex items-center justify-center text-[10px] font-black ${rating === n ? 'bg-[#0f4c4c] text-white' : ''}`}>
                         {n}
                       </div>
                     ))}
@@ -99,40 +102,47 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
               </tr>
             );
           })}
-          <tr className="bg-slate-100 font-black border-t-4 border-slate-900">
-            <td colSpan={2} className="p-4 border-l-4 border-slate-900 text-left text-lg pr-6 uppercase tracking-widest">التقدير العام النهائي</td>
-            <td className="p-4 border-l-4 border-slate-900 text-center text-lg font-sans">100%</td>
-            <td className="p-4 text-center text-3xl font-black font-sans text-[#0f4c4c]">{evaluation.total_score}</td>
+          <tr className="bg-slate-100 font-black border-t-2 border-slate-900">
+            <td colSpan={2} className="p-2.5 border-l-2 border-slate-900 text-left text-sm pr-4 uppercase tracking-widest">إجمالي درجة الأداء الوظيفي</td>
+            <td className="p-2.5 border-l-2 border-slate-900 text-center font-sans text-sm">100</td>
+            <td className="p-2.5 text-center text-2xl font-black font-sans text-[#0f4c4c]">{evaluation.total_score}</td>
           </tr>
         </tbody>
       </table>
 
-      <div className="border-4 border-slate-900 rounded-[2.5rem] p-8 mb-12 bg-slate-50/50 shadow-inner min-h-[150px] relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-[#0f4c4c] text-white px-6 py-2 rounded-bl-[1.5rem] font-black text-sm">التوصيات والوصف الوظيفي</div>
-        <div className="mt-8 space-y-4">
+      {/* Recommendations - More compact */}
+      <div className="border-2 border-slate-900 rounded-2xl p-5 mb-10 bg-slate-50/50 relative overflow-hidden">
+        <div className="absolute top-0 right-0 bg-[#0f4c4c] text-white px-4 py-1 rounded-bl-xl font-black text-[10px]">التوصيات والوصف المهني</div>
+        <div className="mt-4 space-y-2">
            <div className="flex items-center gap-3">
-              <span className="font-black text-xl text-[#0f4c4c] border-b-2 border-[#0f4c4c]">{gradeInfo.label}:</span>
-              <span className="text-lg font-bold text-slate-600 italic">"{gradeInfo.desc}"</span>
+              <span className="font-black text-base text-[#0f4c4c] border-b border-[#0f4c4c]">{gradeInfo.label}:</span>
+              <span className="text-sm font-bold text-slate-600 italic">"{gradeInfo.desc}"</span>
            </div>
-           <p className="text-xl leading-relaxed font-bold text-slate-800">
+           <p className="text-sm leading-relaxed font-bold text-slate-800">
             {evaluation.comments || 'يُنصح بالاستمرار في تطوير الممارسات التعليمية بما يتوافق مع أحدث الاستراتيجيات التربوية المعتمدة.'}
            </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-32 mt-16 px-12">
-        <div className="text-center space-y-12">
-          <p className="font-black text-xl border-b-4 border-slate-900 inline-block px-8 pb-2">توقيع الموظف/ة</p>
-          <div className="pt-2">
-            <p className="text-lg font-black text-slate-800">{staff.full_name}</p>
+      {/* Signatures - Better placement for A4 bottom */}
+      <div className="grid grid-cols-2 gap-20 mt-8 px-10">
+        <div className="text-center space-y-10">
+          <p className="font-black text-sm border-b-2 border-slate-900 inline-block px-6 pb-1">توقيع الموظف/ة</p>
+          <div className="pt-1">
+            <p className="text-base font-black text-slate-800">{staff.full_name}</p>
           </div>
         </div>
-        <div className="text-center space-y-12">
-          <p className="font-black text-xl border-b-4 border-slate-900 inline-block px-8 pb-2">اعتماد مدير المدرسة</p>
-          <div className="pt-2">
-            <p className="text-lg font-black text-slate-800">{principalName}</p>
+        <div className="text-center space-y-10">
+          <p className="font-black text-sm border-b-2 border-slate-900 inline-block px-6 pb-1">اعتماد مدير المدرسة</p>
+          <div className="pt-1">
+            <p className="text-base font-black text-slate-800">{principalName}</p>
           </div>
         </div>
+      </div>
+
+      {/* Footer stamp-like text */}
+      <div className="mt-12 text-center">
+         <p className="text-[9px] text-slate-300 font-sans tracking-[0.3em] uppercase">This is an electronically generated document - PRINCE MAJID SCHOOL SYSTEM</p>
       </div>
     </div>
   );
