@@ -9,57 +9,47 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
     <style>
-      :root {
-        --primary: #0f4c4c;
-        --secondary: #00a18e;
-      }
       body {
         font-family: 'Cairo', sans-serif;
         background-color: #f8fafc;
-        -webkit-tap-highlight-color: transparent;
+        margin: 0;
       }
-      .font-official {
-        font-family: 'Amiri', serif;
-      }
-      .canvas-glass {
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-      }
-      
+      .font-official { font-family: 'Amiri', serif; }
+
+      /* كود الطباعة الاحترافي */
       @media print {
         @page {
           size: A4 portrait;
-          margin: 0;
+          margin: 0; /* نلغي هوامش المتصفح الافتراضية */
         }
-        body {
-          background-color: white !important;
-          margin: 0 !important;
-          padding: 0 !important;
+        
+        /* إخفاء كل شيء في الموقع */
+        body * {
+          visibility: hidden;
+        }
+
+        /* إظهار حاوية الطباعة فقط وتثبيتها في الصفحة */
+        .printable-area, .printable-area * {
+          visibility: visible;
+        }
+
+        .printable-area {
+          position: absolute;
+          left: 0;
+          top: 0;
           width: 210mm;
           height: 297mm;
-        }
-        .no-print {
-          display: none !important;
-        }
-        .printable-document {
-          font-family: 'Amiri', serif !important;
-          width: 210mm !important;
-          height: 297mm !important;
-          box-shadow: none !important;
-          border: none !important;
+          background: white !important;
           margin: 0 !important;
-          padding: 15mm !important;
-          page-break-after: avoid;
-          page-break-before: avoid;
+          padding: 15mm !important; /* الهامش الرسمي للمستند */
+          box-sizing: border-box;
         }
-        /* Fix for potential horizontal overflow */
-        * {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
+
+        /* منع المتصفح من إضافة روابط أو تواريخ تلقائية */
+        header, footer, .no-print {
+          display: none !important;
         }
       }
     </style>
