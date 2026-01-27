@@ -6,7 +6,7 @@ import {
   Search, LogOut, Printer, 
   MessageCircle, ShieldCheck, Settings, Sparkles,
   Users, CheckCircle, Clock, FileSearch, UserCheck, X, AlertCircle,
-  UserPlus, UserMinus, ShieldAlert, Check
+  UserPlus, UserMinus, ShieldAlert, Check, Loader2
 } from 'lucide-react';
 import EvaluationModal from './EvaluationModal';
 import PrintableReport from './PrintableReport';
@@ -15,6 +15,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
   const [staff, setStaff] = useState<Profile[]>([]);
   const [evaluations, setEvaluations] = useState<Record<string, Evaluation>>({});
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [view, setView] = useState<'active' | 'pending'>('active');
   const [selectedStaff, setSelectedStaff] = useState<Profile | null>(null);
@@ -24,35 +25,70 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
 
   const fetchData = async () => {
     setLoading(true);
-    // جلب جميع الموظفين ما عدا المدير
-    const { data: staffData } = await supabase.from('profiles').select('*').neq('role', UserRole.PRINCIPAL).order('created_at', { ascending: false });
-    const { data: evalData } = await supabase.from('evaluations').select('*');
-    if (staffData) setStaff(staffData);
-    if (evalData) {
-      const evalMap = evalData.reduce((acc: any, curr: Evaluation) => {
-        acc[curr.staff_id] = curr;
-        return acc;
-      }, {});
-      setEvaluations(evalMap);
+    try {
+      const { data: staffData, error: fetchError } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('role', UserRole.PRINCIPAL)
+        .order('created_at', { ascending: false });
+      
+      if (fetchError) {
+        if (fetchError.message.includes('is_approved')) {
+          alert("خطأ: عمود 'is_approved' غير موجود في قاعدة البيانات. يرجى تنفيذ أمر SQL المذكور في التعليمات.");
+        } else {
+          console.error(fetchError);
+        }
+      }
+
+      const { data: evalData } = await supabase.from('evaluations').select('*');
+      
+      if (staffData) setStaff(staffData);
+      if (evalData) {
+        const evalMap = evalData.reduce((acc: any, curr: Evaluation) => {
+          acc[curr.staff_id] = curr;
+          return acc;
+        }, {});
+        setEvaluations(evalMap);
+      }
+    } catch (e) {
+      console.error("Fetch error:", e);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const approveUser = async (id: string) => {
     if (!confirm('هل أنت متأكد من اعتماد هذا الحساب؟ سيتمكن الموظف من الدخول فوراً.')) return;
-    const { error } = await supabase.from('profiles').update({ is_approved: true }).eq('id', id);
-    if (error) alert(error.message);
-    else {
-      // إرسال رسالة ترحيبية عبر واتساب اختيارياً
-      fetchData();
+    
+    setProcessingId(id);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_approved: true })
+        .eq('id', id);
+
+      if (error) {
+        alert('حدث خطأ أثناء الاعتماد: ' + error.message + '\n\nتأكد من تنفيذ أمر SQL وتفعيل سياسات (RLS) في Supabase.');
+      } else {
+        // تحديث القائمة محلياً فوراً لتجربة مستخدم أسلس
+        setStaff(prev => prev.map(s => s.id === id ? { ...s, is_approved: true } : s));
+        alert('تم اعتماد الحساب بنجاح!');
+        fetchData(); // إعادة الجلب للتأكيد
+      }
+    } catch (err: any) {
+      alert('خطأ غير متوقع: ' + err.message);
+    } finally {
+      setProcessingId(null);
     }
   };
 
   const deleteUser = async (id: string) => {
     if (!confirm('سيتم حذف طلب هذا المستخدم نهائياً. هل أنت متأكد؟')) return;
+    setProcessingId(id);
     const { error } = await supabase.from('profiles').delete().eq('id', id);
     if (error) alert(error.message);
     else fetchData();
+    setProcessingId(null);
   };
 
   const activeStaff = staff.filter(s => s.is_approved && (s.full_name.includes(searchTerm) || s.mobile.includes(searchTerm)));
@@ -92,8 +128,8 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-cairo">
-      {/* هيدر رسمي متوازن - يطابق واجهة المعلمين تماماً */}
+    <div className="min-h-screen bg-[#f8fafc] font-cairo text-right" dir="rtl">
+      {/* هيدر رسمي متوازن */}
       <header className="bg-[#0f4c4c] text-white pt-8 pb-20 px-6 relative overflow-hidden shadow-2xl no-print">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
            {/* اليمين: البيانات الرسمية */}
@@ -149,19 +185,28 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
         </div>
 
         {/* جدول العرض */}
-        <div className="bg-white rounded-[4rem] shadow-2xl border border-slate-100 overflow-hidden">
-          {view === 'active' ? (
+        <div className="bg-white rounded-[4rem] shadow-2xl border border-slate-100 overflow-hidden min-h-[400px]">
+          {loading ? (
+             <div className="flex flex-col items-center justify-center py-40 gap-4">
+                <Loader2 className="w-12 h-12 text-emerald-600 animate-spin" />
+                <p className="text-slate-400 font-bold">جاري تحديث البيانات...</p>
+             </div>
+          ) : view === 'active' ? (
             <table className="w-full text-right border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-400 text-[11px] font-black border-b border-slate-100">
-                  <th className="px-10 py-10">الموظف</th>
-                  <th className="px-10 py-10">الشواهد الرقمية</th>
+                  <th className="px-10 py-10 text-right">الموظف</th>
+                  <th className="px-10 py-10 text-right">الشواهد الرقمية</th>
                   <th className="px-10 py-10 text-center">الدرجة (النقاط)</th>
                   <th className="px-10 py-10 text-center">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {activeStaff.map((s) => {
+                {activeStaff.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-20 text-center text-slate-300 italic">لا يوجد موظفون معتمدون حالياً</td>
+                  </tr>
+                ) : activeStaff.map((s) => {
                   const ev = evaluations[s.id];
                   const hasV2 = !!s.drive_link_v2;
                   const info = ev ? getGradeInfo(ev.total_score) : null;
@@ -172,14 +217,14 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm ${hasV2 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-[#0f4c4c]'}`}>{s.full_name.charAt(0)}</div>
                            <div>
                              <p className="font-black text-slate-800 text-lg">{s.full_name}</p>
-                             <div className="text-[10px] text-slate-400 font-sans mt-1">{s.role} | {s.mobile}</div>
+                             <div className="text-[10px] text-slate-400 font-sans mt-1 tracking-wider">{s.role} | {s.mobile}</div>
                            </div>
                         </div>
                       </td>
                       <td className="px-10 py-10">
                         <div className="flex flex-col gap-2">
-                          {s.drive_link && <a href={s.drive_link} target="_blank" className="text-[10px] font-black text-slate-500 bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-2 w-fit">المجلد الأساسي</a>}
-                          {hasV2 && <a href={s.drive_link_v2} target="_blank" className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl flex items-center gap-2 w-fit border border-emerald-100 ring-2 ring-emerald-500/20"><AlertCircle className="w-3 h-3" /> مجلد التحسين</a>}
+                          {s.drive_link && <a href={s.drive_link} target="_blank" className="text-[10px] font-black text-slate-500 bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-2 w-fit hover:bg-slate-200 transition-colors">المجلد الأساسي</a>}
+                          {hasV2 && <a href={s.drive_link_v2} target="_blank" className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl flex items-center gap-2 w-fit border border-emerald-100 ring-2 ring-emerald-500/20 hover:bg-emerald-100 transition-colors"><AlertCircle className="w-3 h-3" /> مجلد التحسين</a>}
                         </div>
                       </td>
                       <td className="px-10 py-10">
@@ -207,27 +252,35 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
           ) : (
             <div className="p-10">
               {pendingStaff.length === 0 ? (
-                <div className="text-center py-20">
+                <div className="text-center py-24 bg-slate-50/50 rounded-[3rem] border-2 border-dashed border-slate-100">
                    <ShieldCheck className="w-20 h-20 text-slate-100 mx-auto mb-4" />
                    <p className="text-slate-400 font-black">لا توجد طلبات انضمام جديدة بانتظار الموافقة</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                    {pendingStaff.map(s => (
-                     <div key={s.id} className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 flex items-center justify-between shadow-sm">
+                     <div key={s.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 flex flex-col gap-6 shadow-sm hover:shadow-xl transition-all group">
                         <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-[#0f4c4c] font-black shadow-sm">{s.full_name.charAt(0)}</div>
-                           <div>
-                              <p className="font-black text-slate-800">{s.full_name}</p>
-                              <p className="text-[10px] text-slate-500 font-bold">{s.role} | {s.mobile}</p>
+                           <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-[#0f4c4c] font-black text-xl shadow-sm group-hover:bg-[#0f4c4c] group-hover:text-white transition-colors">{s.full_name.charAt(0)}</div>
+                           <div className="text-right">
+                              <p className="font-black text-slate-800 text-lg leading-tight">{s.full_name}</p>
+                              <p className="text-[11px] text-slate-400 font-bold mt-1">{s.role} | {s.mobile}</p>
                            </div>
                         </div>
                         <div className="flex gap-2">
-                           <button onClick={() => approveUser(s.id)} className="bg-emerald-600 text-white p-3 rounded-xl hover:bg-emerald-700 transition shadow-lg flex items-center gap-2" title="اعتماد">
-                              <Check className="w-5 h-5" />
-                              <span className="text-[10px] font-black">اعتماد</span>
+                           <button 
+                             disabled={processingId === s.id}
+                             onClick={() => approveUser(s.id)} 
+                             className="flex-1 bg-emerald-600 text-white py-3.5 rounded-2xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                           >
+                              {processingId === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+                              <span className="text-xs font-black">اعتماد الحساب</span>
                            </button>
-                           <button onClick={() => deleteUser(s.id)} className="bg-red-50 text-red-600 p-3 rounded-xl hover:bg-red-600 hover:text-white transition" title="حذف">
+                           <button 
+                             disabled={processingId === s.id}
+                             onClick={() => deleteUser(s.id)} 
+                             className="bg-red-50 text-red-600 px-4 py-3.5 rounded-2xl hover:bg-red-600 hover:text-white transition disabled:opacity-30"
+                           >
                               <UserMinus className="w-5 h-5" />
                            </button>
                         </div>
