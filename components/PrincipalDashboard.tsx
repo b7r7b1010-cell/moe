@@ -38,6 +38,16 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
 
   const filteredStaff = staff.filter(s => (s.full_name.includes(searchTerm) || s.mobile.includes(searchTerm)) && (roleFilter === 'all' || s.role === roleFilter));
 
+  const getGradeInfo = (score: number) => {
+    let points = 1;
+    let label = 'غير مرضي';
+    if (score >= 90) { points = 5; label = 'ممتاز'; }
+    else if (score >= 80) { points = 4; label = 'جيد جداً'; }
+    else if (score >= 70) { points = 3; label = 'جيد'; }
+    else if (score >= 60) { points = 2; label = 'مرضي'; }
+    return { label, points };
+  };
+
   const handlePrint = (s: Profile, ev: Evaluation) => {
     setEvaluationToShow({ staff: s, evaluation: ev });
     setTimeout(() => {
@@ -46,25 +56,61 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
     }, 500);
   };
 
+  const openWhatsApp = (s: Profile, ev?: Evaluation) => {
+    const mobile = s.mobile;
+    const formatted = mobile.startsWith('0') ? '966' + mobile.substring(1) : mobile;
+    
+    let message = `الأستاذ / ${s.full_name}%0A`;
+    
+    if (ev) {
+      const info = getGradeInfo(ev.total_score);
+      message += `لقد تم رصد تقييمك للأداء الوظيفي بنجاح:%0A`;
+      message += `الدرجة: ${ev.total_score}%%0A`;
+      message += `النقاط: ${info.points} من 5%0A`;
+      message += `التقدير: ${info.label}%0A%0A`;
+      message += `توصيات المدير: %0A${ev.comments || 'نثمن جهودكم المهنية المتميزة.'}%0A%0A`;
+      message += `رسالة تحفيزية: %0Aنقدر عطاءكم المستمر وإخلاصكم في أداء رسالتكم السامية، وبكم نرتقي بالعملية التعليمية نحو الإتقان.%0A%0A`;
+    } else {
+      message += `نأمل التكرم بتجهيز ملف الشواهد الرقمي الخاص بكم عبر المنصة لتتم عملية التقييم.%0A%0A`;
+    }
+    
+    message += `مدير المدرسة: ${userProfile.full_name}`;
+    
+    window.open(`https://wa.me/${formatted}?text=${message}`, '_blank');
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] font-cairo">
-      <header className="bg-[#0f4c4c] text-white pt-10 pb-24 px-8 relative overflow-hidden shadow-2xl no-print">
-        <div className="max-w-7xl mx-auto flex justify-between items-center relative z-10">
-           <div className="text-right space-y-1">
-              <p className="text-sm font-bold">الإدارة العامة للتعليم بجدة</p>
-              <p className="text-xl font-black mt-2">ثانوية الأمير عبدالمجيد الأولى</p>
+      {/* هيدر رسمي متوازن - يطابق واجهة المعلمين تماماً */}
+      <header className="bg-[#0f4c4c] text-white pt-8 pb-20 px-6 relative overflow-hidden shadow-2xl no-print">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
+           {/* اليمين: البيانات الرسمية */}
+           <div className="text-right space-y-0.5 order-2 md:order-1 flex-1">
+              <p className="text-[10px] md:text-xs font-bold opacity-90">المملكة العربية السعودية</p>
+              <p className="text-[10px] md:text-xs font-bold opacity-90">وزارة التعليم</p>
+              <p className="text-[10px] md:text-xs font-bold opacity-90">الإدارة العامة للتعليم بمحافظة جدة</p>
+              <p className="text-sm md:text-lg font-black mt-2 text-[#00a18e] border-r-4 border-[#00a18e] pr-3">ثانوية الأمير عبدالمجيد الأولى</p>
            </div>
-           <div className="absolute left-1/2 -translate-x-1/2">
-              <img src="https://up6.cc/2026/01/176840436497671.png" className="h-32 object-contain drop-shadow-2xl" alt="Logo" />
+
+           {/* الوسط: الشعار */}
+           <div className="order-1 md:order-2 flex-shrink-0">
+              <img src="https://up6.cc/2026/01/176840436497671.png" className="h-24 md:h-32 object-contain drop-shadow-2xl" alt="Logo" />
            </div>
-           <div className="bg-black/30 p-4 rounded-3xl border border-white/10 text-right">
-              <p className="text-[10px] font-bold text-emerald-400 mb-1">المدير المسؤول:</p>
-              <p className="text-sm font-black text-white">{userProfile.full_name}</p>
+
+           {/* اليسار: معلومات المدير */}
+           <div className="flex flex-col items-center md:items-end gap-2 order-3 flex-1">
+              <div className="bg-black/30 px-6 py-3 rounded-2xl border border-white/10 text-center md:text-right">
+                <p className="text-[10px] opacity-70 font-bold text-emerald-400">المدير المسؤول،</p>
+                <p className="text-sm font-black">{userProfile.full_name}</p>
+              </div>
+              <button onClick={() => supabase.auth.signOut()} className="text-red-300 hover:text-red-100 text-[10px] font-bold flex items-center gap-1 transition-colors">
+                <LogOut className="w-3 h-3" /> تسجيل الخروج
+              </button>
            </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 -mt-16 space-y-8 relative z-20 pb-20 no-print">
+      <main className="max-w-7xl mx-auto px-6 -mt-10 space-y-8 relative z-20 pb-20 no-print">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
            {[
              { label: 'إجمالي المنسوبين', value: staff.length, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -87,7 +133,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
               <tr className="bg-slate-50 text-slate-400 text-[11px] font-black border-b border-slate-100">
                 <th className="px-10 py-10">الموظف</th>
                 <th className="px-10 py-10">الشواهد الرقمية</th>
-                <th className="px-10 py-10">الدرجة (النقاط)</th>
+                <th className="px-10 py-10 text-center">الدرجة (النقاط)</th>
                 <th className="px-10 py-10 text-center">الإجراءات</th>
               </tr>
             </thead>
@@ -95,8 +141,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
               {filteredStaff.map((s) => {
                 const ev = evaluations[s.id];
                 const hasV2 = !!s.drive_link_v2;
-                // تحويل الدرجة لنقاط في لوحة المدير أيضاً
-                const points = ev ? (ev.total_score >= 90 ? 5 : ev.total_score >= 80 ? 4 : ev.total_score >= 70 ? 3 : ev.total_score >= 60 ? 2 : 1) : '--';
+                const info = ev ? getGradeInfo(ev.total_score) : null;
                 
                 return (
                   <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
@@ -124,19 +169,22 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
                       </div>
                     </td>
                     <td className="px-10 py-10">
-                      {ev ? (
-                         <div className="text-center w-fit">
-                            <div className="text-2xl font-black text-[#0f4c4c] font-sans">{points} <span className="text-xs text-slate-300">/ 5</span></div>
-                            <div className="text-[10px] font-bold text-slate-400">({ev.total_score}%)</div>
+                      {info ? (
+                         <div className="text-center">
+                            <div className="text-2xl font-black text-[#0f4c4c] font-sans">{info.points} <span className="text-xs text-slate-300">/ 5</span></div>
+                            <div className="text-[10px] font-bold text-slate-400">({info.label})</div>
                          </div>
-                      ) : <span className="text-slate-200">--</span>}
+                      ) : <span className="text-slate-200 text-center block">--</span>}
                     </td>
                     <td className="px-10 py-10">
-                      <div className="flex items-center justify-center gap-4">
-                        <button onClick={() => setSelectedStaff(s)} className={`px-8 py-3.5 rounded-2xl text-[11px] font-black transition-all shadow-lg flex items-center gap-3 ${hasV2 ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-[#0f4c4c] hover:bg-black text-white'}`}>
-                           <UserCheck className="w-5 h-5" /> {ev ? 'تعديل التقييم' : 'بدء التقييم'}
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => setSelectedStaff(s)} className={`px-6 py-3.5 rounded-2xl text-[11px] font-black transition-all shadow-lg flex items-center gap-3 ${hasV2 ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-[#0f4c4c] hover:bg-black text-white'}`}>
+                           <UserCheck className="w-5 h-5" /> {ev ? 'تعديل' : 'تقييم'}
                         </button>
-                        {ev && <button onClick={() => handlePrint(s, ev)} className="p-3 text-slate-400 hover:bg-slate-100 rounded-2xl transition-all"><Printer className="w-6 h-6" /></button>}
+                        <button onClick={() => openWhatsApp(s, ev)} className="p-3 text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all border border-transparent hover:border-emerald-200" title="إرسال النتيجة عبر واتساب">
+                           <MessageCircle className="w-6 h-6" />
+                        </button>
+                        {ev && <button onClick={() => handlePrint(s, ev)} className="p-3 text-slate-400 hover:bg-slate-100 rounded-2xl transition-all" title="طباعة البطاقة"><Printer className="w-6 h-6" /></button>}
                       </div>
                     </td>
                   </tr>
