@@ -19,7 +19,8 @@ export interface Profile {
   mobile: string;
   role: UserRole;
   drive_link?: string;
-  drive_link_v2?: string; // المجلد التحسيني
+  drive_link_v2?: string; 
+  is_approved: boolean; // الحقل الجديد للتحكم في الاعتماد
   created_at: string;
 }
 
@@ -27,7 +28,7 @@ export interface Evaluation {
   id: string;
   staff_id: string;
   evaluator_id: string;
-  scores: Record<number, number>; // criterion_id -> score (0-100)
+  scores: Record<number, number>; 
   total_score: number;
   comments?: string;
   created_at: string;

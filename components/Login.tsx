@@ -37,7 +37,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mobile.match(/^05\d{8}$/)) {
-      alert('رقم جوال غير صحيح');
+      alert('رقم جوال غير صحيح (يجب أن يبدأ بـ 05 ويتكون من 10 أرقام)');
       return;
     }
     setLoading(true);
@@ -45,15 +45,23 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     try {
       if (isRegistering) {
         if (fullName.trim().split(' ').length < 3) {
-          alert('الرجاء كتابة الاسم الرباعي');
+          alert('الرجاء كتابة الاسم الرباعي كاملاً');
           setLoading(false);
           return;
         }
         const { data: authData, error: authError } = await supabase.auth.signUp({ email: internalEmail, password });
         if (authError) throw authError;
         if (authData.user) {
-          await supabase.from('profiles').upsert({ id: authData.user.id, full_name: fullName, mobile: mobile, role: role });
-          alert('تم إنشاء الحساب بنجاح! يرجى تسجيل الدخول.');
+          // المدير يتم اعتماده تلقائياً، المعلمون ينتظرون الموافقة
+          const autoApprove = role === UserRole.PRINCIPAL;
+          await supabase.from('profiles').upsert({ 
+            id: authData.user.id, 
+            full_name: fullName, 
+            mobile: mobile, 
+            role: role,
+            is_approved: autoApprove 
+          });
+          alert(autoApprove ? 'تم إنشاء حساب المدير بنجاح.' : 'تم تسجيل طلبك بنجاح! حسابك بانتظار موافقة إدارة المدرسة لتفعيل الدخول.');
           setIsRegistering(false);
         }
       } else {
