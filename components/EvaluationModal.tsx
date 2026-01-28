@@ -30,30 +30,20 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
         .limit(1)
         .single();
       if (data && data.scores) {
-        const oldRatings: Record<number, number> = {};
-        criteria.forEach(c => {
-          const weightedScore = data.scores[c.id] || 0;
-          if (weightedScore > 0) {
-            // التقدير الخماسي = التقدير الموزون / الوزن النسبي العشري
-            oldRatings[c.id] = Math.round(weightedScore / (c.weight * 5));
-          }
-        });
-        setRatings(oldRatings);
+        setRatings(data.scores);
         setComments(data.comments || '');
         setExistingEvalId(data.id);
       }
     };
     fetchOldEval();
-  }, [staff.id, criteria]);
+  }, [staff.id]);
 
-  // الخطوة 1: ضرب (التقييم × الوزن النسبي)
   const calculateScoreForCriterion = (id: number, rating: number) => {
     const criterion = criteria.find(c => c.id === id);
     if (!criterion) return 0;
     return rating * criterion.weight;
   };
 
-  // الخطوة 2: جمع النتائج للحصول على الدرجة النهائية من 5
   const calculateTotalFrom5 = () => {
     let total = 0;
     Object.entries(ratings).forEach(([id, rating]) => {
@@ -62,7 +52,6 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
     return Number(total.toFixed(2));
   };
 
-  // الخطوة 3: التحويل لنسبة مئوية (الدرجة ÷ 5 × 100)
   const calculatePercentage = (totalFrom5: number) => {
     return Math.round((totalFrom5 / 5) * 100);
   };
@@ -89,11 +78,10 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
     const totalFrom5 = calculateTotalFrom5();
     const finalPercentage = calculatePercentage(totalFrom5);
 
-    // نخزن الدرجة النهائية كنسبة مئوية في قاعدة البيانات للتوافق مع التقارير
     const payload: any = {
       staff_id: staff.id,
       evaluator_id: user?.id,
-      scores: ratings, // نخزن التقديرات الخام (1-5)
+      scores: ratings,
       total_score: finalPercentage,
       comments
     };
@@ -118,8 +106,6 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
   return (
     <div className="fixed inset-0 bg-[#0f4c4c]/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-[1300px] h-[95vh] rounded-[4rem] overflow-hidden flex flex-col shadow-2xl border-4 border-white/20">
-        
-        {/* هيدر التقييم */}
         <div className="bg-[#0f4c4c] p-10 text-white flex justify-between items-center relative border-b-8 border-[#00a18e]">
           <div className="flex items-center gap-8">
             <button onClick={onClose} className="p-5 bg-white/10 hover:bg-red-500 rounded-[2rem] transition-all group">
@@ -130,7 +116,6 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
               <p className="text-emerald-400 font-bold tracking-widest uppercase text-sm mt-1">{staff.full_name} — {staff.role}</p>
             </div>
           </div>
-          
           <div className="flex items-center gap-6">
             <div className="bg-black/30 px-10 py-4 rounded-[2.5rem] border border-white/10 text-center shadow-inner">
                <p className="text-[10px] font-black opacity-50 mb-1 uppercase tracking-tighter">الدرجة النهائية من 5</p>
@@ -142,9 +127,7 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
             </div>
           </div>
         </div>
-
         <div className="flex-1 flex overflow-hidden">
-          {/* جدول العناصر */}
           <div className="flex-1 overflow-auto p-10 bg-slate-50/50">
             <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-slate-100">
                <table className="w-full text-right">
@@ -184,8 +167,6 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
                </table>
             </div>
           </div>
-
-          {/* عمود الملاحظات والحفظ */}
           <div className="w-[450px] bg-white border-r border-slate-100 p-12 flex flex-col gap-10 shadow-2xl">
              <div className={`text-center p-10 rounded-[3.5rem] border-4 transition-colors ${percentage >= 60 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                 <Calculator className={`w-12 h-12 mx-auto mb-4 ${grade.color}`} />
@@ -193,14 +174,12 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
                 <div className={`text-4xl font-black mb-2 ${grade.color}`}>{grade.label}</div>
                 <p className="text-[10px] font-bold text-slate-400 italic">بناءً على جمع النتائج الموزونة</p>
              </div>
-
              <div className="space-y-4">
                 <label className="font-black text-slate-600 text-sm flex items-center gap-2">
                    <Lightbulb className="w-6 h-6 text-amber-500" /> التوصيات والملاحظات
                 </label>
                 <textarea className="w-full p-8 rounded-[2.5rem] border-2 border-slate-100 focus:border-[#0f4c4c] outline-none h-56 resize-none bg-slate-50/50 text-sm font-bold shadow-inner" placeholder="اكتب توصياتك المهنية للموظف..." value={comments} onChange={(e) => setComments(e.target.value)} />
              </div>
-
              <button onClick={handleSubmit} disabled={submitting} className="mt-auto w-full bg-[#0f4c4c] text-white py-8 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:bg-black transition-all flex items-center justify-center gap-4 active:scale-95">
                 {submitting ? 'جاري الاعتماد...' : 'حفظ واعتـماد التقييم'} <Save className="w-8 h-8" />
              </button>

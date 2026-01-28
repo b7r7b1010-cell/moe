@@ -46,7 +46,7 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
             </td>
             <td className="w-1/3 text-left align-top font-sans" style={{ fontSize: isCondensed ? '8pt' : '9pt' }}>
               <p>التاريخ: {new Date(evaluation.created_at).toLocaleDateString('ar-SA')}</p>
-              <p>العام الدراسي: 1446هـ</p>
+              <p>العام الدراسي: 1447هـ</p>
               <p className="text-gray-400">ID: {evaluation.id.split('-')[0].toUpperCase()}</p>
             </td>
           </tr>
@@ -86,9 +86,7 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
         </thead>
         <tbody>
           {criteria.map((c, idx) => {
-            // استرجاع التقدير الخام (1-5) من مصفوفة الدرجات
             const rawRating = evaluation.scores[c.id] || 1;
-
             return (
               <tr key={c.id} className="border-b border-black">
                 <td className={`border-l-2 border-black ${isCondensed ? 'p-1' : 'p-1.5'} text-center font-sans`}>{idx + 1}</td>
@@ -118,13 +116,11 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
         </tbody>
       </table>
 
-      {/* الملحوظات المهنية */}
       <div className={`border-2 border-black p-3 mb-4 ${isCondensed ? 'min-h-[50px]' : 'min-h-[80px]'} relative`}>
         <p className="font-bold text-[8.5pt] mb-1 underline">توصيات وملاحظات القيادة المدرسية:</p>
         <p className="text-[9.5pt] leading-snug italic">"{evaluation.comments || 'نثمن التزامكم المهني، ونحثكم على مواصلة التطوير المستمر للأداء.'}"</p>
       </div>
 
-      {/* منطقة التواقيع */}
       <div className={`flex justify-between items-start px-12 ${isCondensed ? 'mt-4' : 'mt-auto pb-14'}`}>
         <div className="text-center w-64">
           <p className={`font-bold ${isCondensed ? 'mb-10' : 'mb-16'} text-xs uppercase tracking-widest`}>توقيع الموظف</p>
@@ -136,7 +132,6 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
         </div>
       </div>
 
-      {/* تذييل الصفحة الرسمي */}
       <div className="absolute bottom-4 left-0 right-0 text-center opacity-40 text-[6pt] font-sans tracking-[0.3em] font-bold">
         * PRINCE MAJID SCHOOL PERFORMANCE SYSTEM - OFFICIAL DIGITAL RECORD *
       </div>
