@@ -59,12 +59,11 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
   const pendingStaff = staff.filter(s => !s.is_approved);
 
   const getGradeInfo = (score: number) => {
-    let points = 1; let label = 'غير مرضي';
-    if (score >= 90) { points = 5; label = 'مثالي'; }
-    else if (score >= 80) { points = 4; label = 'تخطى التوقعات'; }
-    else if (score >= 70) { points = 3; label = 'وافق التوقعات'; }
-    else if (score >= 60) { points = 2; label = 'بحاجة إلى تطوير'; }
-    return { label, points };
+    if (score >= 90) return { label: 'مثالي', points: 5, color: 'text-emerald-600' };
+    if (score >= 80) return { label: 'تخطى التوقعات', points: 4, color: 'text-blue-600' };
+    if (score >= 70) return { label: 'وافق التوقعات', points: 3, color: 'text-amber-600' };
+    if (score >= 60) return { label: 'بحاجة إلى تطوير', points: 2, color: 'text-orange-600' };
+    return { label: 'غير مرضي', points: 1, color: 'text-red-600' };
   };
 
   const handlePrint = (s: Profile, ev: Evaluation) => {
@@ -78,9 +77,10 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
     let message = `الأستاذ / ${s.full_name}%0A`;
     if (ev) {
       const info = getGradeInfo(ev.total_score);
-      message += `لقد تم رصد تقييمك للأداء الوظيفي بنجاح:%0Aالتقدير: ${info.label}%0Aالنسبة: ${ev.total_score}%%0A`;
+      const weightedScore = (ev.total_score / 20).toFixed(2);
+      message += `لقد تم رصد تقييمك للأداء الوظيفي بنجاح:%0Aالتقدير اللفظي: ${info.label}%0Aالدرجة التقديرية: ${info.points} من 5%0Aالمعدل الموزون: ${weightedScore}%0Aالنسبة المئوية: ${ev.total_score}%%0A`;
       if (ev.comments) {
-        message += `توصيات المدير: ${ev.comments}%0A%0A`;
+        message += `توصيات مدير المدرسة: ${ev.comments}%0A%0A`;
       } else {
         message += `%0A`;
       }
@@ -149,7 +149,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
                         </div>
                         {view === 'active' && (
                           <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl">
-                             <div className="text-right"><p className="text-[10px] text-slate-400 font-bold">التقدير</p><p className="text-sm font-black text-[#0f4c4c]">{info ? info.label : '--'}</p></div>
+                             <div className="text-right"><p className="text-[10px] text-slate-400 font-bold">التقدير</p><p className={`text-sm font-black ${info?.color || 'text-slate-600'}`}>{info ? `${info.label} (${info.points})` : '--'}</p></div>
                              <div className="flex gap-1">
                                 <button onClick={() => openWhatsApp(s, ev)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl"><MessageCircle className="w-5 h-5" /></button>
                                 {ev && <button onClick={() => handlePrint(s, ev)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl"><Printer className="w-5 h-5" /></button>}

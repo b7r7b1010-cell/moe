@@ -33,14 +33,11 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
   };
 
   const getGradeInfo = (score: number) => {
-    let points = 1;
-    let label = 'غير مرضي';
-    let color = 'text-red-600';
-    if (score >= 90) { points = 5; label = 'مثالي'; color = 'text-emerald-600'; }
-    else if (score >= 80) { points = 4; label = 'تخطى التوقعات'; color = 'text-blue-600'; }
-    else if (score >= 70) { points = 3; label = 'وافق التوقعات'; color = 'text-amber-600'; }
-    else if (score >= 60) { points = 2; label = 'بحاجة إلى تطوير'; color = 'text-orange-600'; }
-    return { label, points, color };
+    if (score >= 90) return { label: 'مثالي', points: 5, color: 'text-emerald-600' };
+    if (score >= 80) return { label: 'تخطى التوقعات', points: 4, color: 'text-blue-600' };
+    if (score >= 70) return { label: 'وافق التوقعات', points: 3, color: 'text-amber-600' };
+    if (score >= 60) return { label: 'بحاجة إلى تطوير', points: 2, color: 'text-orange-600' };
+    return { label: 'غير مرضي', points: 1, color: 'text-red-600' };
   };
 
   const handleUpdateLink = async (isV2: boolean) => {
@@ -139,10 +136,10 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
              </div>
              <div className="flex-1 text-center md:text-right">
                 <div className="flex items-center gap-3 mb-1 justify-center md:justify-start">
-                   <h2 className={`text-xl font-black ${grade?.color}`}>مستوى الأداء: {grade?.label}</h2>
+                   <h2 className={`text-xl font-black ${grade?.color}`}>مستوى الأداء: {grade?.label} ({grade?.points} من 5)</h2>
                    <span className="bg-slate-100 px-3 py-1 rounded-full text-[10px] font-bold text-slate-500">{lastEval.total_score}%</span>
                 </div>
-                <p className="text-xs text-slate-500 font-bold">نوصي بمراجعة ملاحظات المدير في الأسفل لتحسين ملفك المهني.</p>
+                <p className="text-xs text-slate-500 font-bold">نوصي بمراجعة ملاحظات مدير المدرسة في الأسفل لتحسين ملفك المهني.</p>
              </div>
              <div className="bg-emerald-50 px-6 py-3 rounded-2xl border border-emerald-100 text-center">
                 <ShieldCheck className="w-5 h-5 text-emerald-600 mx-auto mb-1" />

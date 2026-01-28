@@ -14,15 +14,15 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
   // تكثيف التنسيق إذا كان عدد المعايير > 10
   const isCondensed = criteria.length > 10;
 
-  const getRating = (percentage: number) => {
-    if (percentage >= 90) return { label: 'مثالي', points: '5' };
-    if (percentage >= 80) return { label: 'تخطى التوقعات', points: '4' };
-    if (percentage >= 70) return { label: 'وافق التوقعات', points: '3' };
-    if (percentage >= 60) return { label: 'بحاجة إلى تطوير', points: '2' };
-    return { label: 'غير مرضي', points: '1' };
+  const getGradeInfo = (score: number) => {
+    if (score >= 90) return { label: 'مثالي', points: 5 };
+    if (score >= 80) return { label: 'تخطى التوقعات', points: 4 };
+    if (score >= 70) return { label: 'وافق التوقعات', points: 3 };
+    if (score >= 60) return { label: 'بحاجة إلى تطوير', points: 2 };
+    return { label: 'غير مرضي', points: 1 };
   };
 
-  const rating = getRating(evaluation.total_score);
+  const grade = getGradeInfo(evaluation.total_score);
   const finalFrom5 = (evaluation.total_score / 100) * 5;
 
   return (
@@ -66,7 +66,7 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
           <div className={`text-center ${isCondensed ? 'px-4' : 'px-8'}`}>
             <p className="text-[8px] font-bold text-gray-500 uppercase">النسبة المئوية</p>
             <div className={`${isCondensed ? 'text-2xl' : 'text-4xl'} font-bold font-sans`}>{Math.round(evaluation.total_score)}%</div>
-            <p className={`${isCondensed ? 'text-[9pt]' : 'text-[10pt]'} font-bold mt-0.5`}>{rating.label}</p>
+            <p className={`${isCondensed ? 'text-[9pt]' : 'text-[10pt]'} font-bold mt-0.5`}>{grade.label} ({grade.points} من 5)</p>
           </div>
         </div>
       </div>
