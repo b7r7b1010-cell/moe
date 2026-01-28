@@ -34,14 +34,30 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     checkConnection();
   }, []);
 
+  // وظيفة لتحويل الأرقام العربية إلى إنجليزية وإزالة المسافات
+  const normalizeMobile = (str: string) => {
+    const arabicNums = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
+    let normalized = str.trim().replace(/\s/g, '');
+    for (let i = 0; i < 10; i++) {
+      normalized = normalized.replace(arabicNums[i], i.toString());
+    }
+    return normalized;
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mobile.match(/^05\d{8}$/)) {
-      alert('رقم جوال غير صحيح (يجب أن يبدأ بـ 05 ويتكون من 10 أرقام)');
+    
+    // توحيد رقم الجوال قبل أي معالجة
+    const cleanMobile = normalizeMobile(mobile);
+    
+    if (!cleanMobile.match(/^05\d{8}$/)) {
+      alert('رقم جوال غير صحيح (يجب أن يبدأ بـ 05 ويتكون من 10 أرقام إنجليزية أو عربية)');
       return;
     }
+
     setLoading(true);
-    const internalEmail = `${mobile}@school.local`;
+    const internalEmail = `${cleanMobile}@school.local`;
+    
     try {
       if (isRegistering) {
         if (fullName.trim().split(' ').length < 3) {
@@ -49,29 +65,41 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           setLoading(false);
           return;
         }
-        const { data: authData, error: authError } = await supabase.auth.signUp({ email: internalEmail, password });
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({ 
+          email: internalEmail, 
+          password 
+        });
+        
         if (authError) throw authError;
+        
         if (authData.user) {
-          // المدير يتم اعتماده تلقائياً، المعلمون ينتظرون الموافقة
           const autoApprove = role === UserRole.PRINCIPAL;
           await supabase.from('profiles').upsert({ 
             id: authData.user.id, 
             full_name: fullName, 
-            mobile: mobile, 
+            mobile: cleanMobile, // حفظ الرقم موحداً في قاعدة البيانات
             role: role,
             is_approved: autoApprove 
           });
+          
           alert(autoApprove ? 'تم إنشاء حساب المدير بنجاح.' : 'تم تسجيل طلبك بنجاح! حسابك بانتظار موافقة إدارة المدرسة لتفعيل الدخول.');
           setIsRegistering(false);
         }
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email: internalEmail, password });
+        const { error: signInError } = await supabase.auth.signInWithPassword({ 
+          email: internalEmail, 
+          password 
+        });
+        
         if (signInError) throw signInError;
         onLogin();
       }
     } catch (err: any) {
       alert('خطأ: ' + err.message);
-    } finally { setLoading(false); }
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return (
@@ -113,7 +141,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                 <div className="space-y-4">
                   <div className="relative">
                     <Phone className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="tel" placeholder="رقم الجوال" required className="w-full pr-10 pl-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-sans focus:border-[#0f4c4c] outline-none" value={mobile} onChange={(e) => setMobile(e.target.value)} dir="ltr" />
+                    <input type="text" placeholder="رقم الجوال (٠٥... أو 05...)" required className="w-full pr-10 pl-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-sans focus:border-[#0f4c4c] outline-none" value={mobile} onChange={(e) => setMobile(e.target.value)} dir="ltr" />
                   </div>
                   <div className="relative">
                     <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -125,7 +153,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               <div className="space-y-4">
                 <div className="relative">
                   <Phone className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="tel" placeholder="رقم الجوال" required className="w-full pr-10 pl-4 py-4 bg-slate-50 rounded-2xl border border-slate-200 text-sm font-sans focus:border-[#0f4c4c] outline-none" value={mobile} onChange={(e) => setMobile(e.target.value)} dir="ltr" />
+                  <input type="text" placeholder="رقم الجوال" required className="w-full pr-10 pl-4 py-4 bg-slate-50 rounded-2xl border border-slate-200 text-sm font-sans focus:border-[#0f4c4c] outline-none" value={mobile} onChange={(e) => setMobile(e.target.value)} dir="ltr" />
                 </div>
                 <div className="relative">
                   <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
