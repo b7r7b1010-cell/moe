@@ -29,8 +29,15 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
+      
       if (data && data.scores) {
-        setRatings(data.scores);
+        // نقوم بتنظيف البيانات المسترجعة لضمان أنها أرقام صحيحة بين 1-5 فقط
+        const cleanScores: Record<number, number> = {};
+        Object.entries(data.scores).forEach(([id, val]) => {
+          const numVal = Number(val);
+          cleanScores[Number(id)] = numVal > 5 ? 5 : numVal;
+        });
+        setRatings(cleanScores);
         setComments(data.comments || '');
         setExistingEvalId(data.id);
       }
@@ -38,16 +45,12 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
     fetchOldEval();
   }, [staff.id]);
 
-  const calculateScoreForCriterion = (id: number, rating: number) => {
-    const criterion = criteria.find(c => c.id === id);
-    if (!criterion) return 0;
-    return rating * criterion.weight;
-  };
-
+  // الحساب الدقيق: نعتمد على مصفوفة المعايير الأصلية وليس على مفاتيح الحالة
   const calculateTotalFrom5 = () => {
     let total = 0;
-    Object.entries(ratings).forEach(([id, rating]) => {
-      total += calculateScoreForCriterion(Number(id), rating as number);
+    criteria.forEach(c => {
+      const rating = ratings[c.id] || 0;
+      total += rating * c.weight;
     });
     return Number(total.toFixed(2));
   };
@@ -57,21 +60,20 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
   };
 
   const getGradeInfo = (percentage: number) => {
-    let label = 'غير مرضي';
-    let color = 'text-red-600';
-    if (percentage >= 90) { label = 'مثالي'; color = 'text-emerald-600'; }
-    else if (percentage >= 80) { label = 'تخطى التوقعات'; color = 'text-blue-600'; }
-    else if (percentage >= 70) { label = 'وافق التوقعات'; color = 'text-amber-600'; }
-    else if (percentage >= 60) { label = 'بحاجة إلى تطوير'; color = 'text-orange-600'; }
-    return { label, color };
+    if (percentage >= 90) return { label: 'مثالي', color: 'text-emerald-600' };
+    if (percentage >= 80) return { label: 'تخطى التوقعات', color: 'text-blue-600' };
+    if (percentage >= 70) return { label: 'وافق التوقعات', color: 'text-amber-600' };
+    if (percentage >= 60) return { label: 'بحاجة إلى تطوير', color: 'text-orange-600' };
+    return { label: 'غير مرضي', color: 'text-red-600' };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (Object.keys(ratings).length < criteria.length) {
-      alert('الرجاء تعبئة كافة بنود التقييم');
+      alert('الرجاء تعبئة كافة بنود التقييم قبل الحفظ');
       return;
     }
+    
     setSubmitting(true);
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -106,6 +108,8 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
   return (
     <div className="fixed inset-0 bg-[#0f4c4c]/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-[1300px] h-[95vh] rounded-[4rem] overflow-hidden flex flex-col shadow-2xl border-4 border-white/20">
+        
+        {/* الهيدر العلوي */}
         <div className="bg-[#0f4c4c] p-10 text-white flex justify-between items-center relative border-b-8 border-[#00a18e]">
           <div className="flex items-center gap-8">
             <button onClick={onClose} className="p-5 bg-white/10 hover:bg-red-500 rounded-[2rem] transition-all group">
@@ -116,6 +120,7 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
               <p className="text-emerald-400 font-bold tracking-widest uppercase text-sm mt-1">{staff.full_name} — {staff.role}</p>
             </div>
           </div>
+          
           <div className="flex items-center gap-6">
             <div className="bg-black/30 px-10 py-4 rounded-[2.5rem] border border-white/10 text-center shadow-inner">
                <p className="text-[10px] font-black opacity-50 mb-1 uppercase tracking-tighter">الدرجة النهائية من 5</p>
@@ -127,6 +132,7 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
             </div>
           </div>
         </div>
+
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-auto p-10 bg-slate-50/50">
             <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-slate-100">
@@ -167,6 +173,7 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
                </table>
             </div>
           </div>
+
           <div className="w-[450px] bg-white border-r border-slate-100 p-12 flex flex-col gap-10 shadow-2xl">
              <div className={`text-center p-10 rounded-[3.5rem] border-4 transition-colors ${percentage >= 60 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                 <Calculator className={`w-12 h-12 mx-auto mb-4 ${grade.color}`} />
@@ -174,12 +181,14 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
                 <div className={`text-4xl font-black mb-2 ${grade.color}`}>{grade.label}</div>
                 <p className="text-[10px] font-bold text-slate-400 italic">بناءً على جمع النتائج الموزونة</p>
              </div>
+
              <div className="space-y-4">
                 <label className="font-black text-slate-600 text-sm flex items-center gap-2">
                    <Lightbulb className="w-6 h-6 text-amber-500" /> التوصيات والملاحظات
                 </label>
                 <textarea className="w-full p-8 rounded-[2.5rem] border-2 border-slate-100 focus:border-[#0f4c4c] outline-none h-56 resize-none bg-slate-50/50 text-sm font-bold shadow-inner" placeholder="اكتب توصياتك المهنية للموظف..." value={comments} onChange={(e) => setComments(e.target.value)} />
              </div>
+
              <button onClick={handleSubmit} disabled={submitting} className="mt-auto w-full bg-[#0f4c4c] text-white py-8 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:bg-black transition-all flex items-center justify-center gap-4 active:scale-95">
                 {submitting ? 'جاري الاعتماد...' : 'حفظ واعتـماد التقييم'} <Save className="w-8 h-8" />
              </button>
