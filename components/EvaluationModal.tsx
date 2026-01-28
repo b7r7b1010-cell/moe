@@ -5,7 +5,7 @@ import { CRITERIA_MAP } from '../constants';
 import { supabase } from '../supabase';
 import { 
   X, Save, ExternalLink, 
-  Award, Lightbulb, Info, Sparkles, FileText, Calculator
+  Award, Lightbulb, Info, Sparkles, FileText, Calculator, Folder, CheckCircle2, Loader2
 } from 'lucide-react';
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
   onClose: () => void;
 }
 
+// مكون التقييم الرئيسي للتعامل مع رصد درجات الموظفين
 const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
   const criteria = CRITERIA_MAP[staff.role] || [];
   const [ratings, setRatings] = useState<Record<number, number>>({});
@@ -31,7 +32,6 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
         .single();
       
       if (data && data.scores) {
-        // نقوم بتنظيف البيانات المسترجعة لضمان أنها أرقام صحيحة بين 1-5 فقط
         const cleanScores: Record<number, number> = {};
         Object.entries(data.scores).forEach(([id, val]) => {
           const numVal = Number(val);
@@ -45,7 +45,6 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
     fetchOldEval();
   }, [staff.id]);
 
-  // الحساب الدقيق: نعتمد على مصفوفة المعايير الأصلية وليس على مفاتيح الحالة
   const calculateTotalFrom5 = () => {
     let total = 0;
     criteria.forEach(c => {
@@ -135,6 +134,45 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 overflow-auto p-10 bg-slate-50/50">
+            {/* قسم مجلدات الشواهد */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              {staff.drive_link ? (
+                <a href={staff.drive_link} target="_blank" rel="noreferrer" 
+                   className="flex items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-[#0f4c4c] hover:shadow-md transition-all group">
+                  <div className="bg-slate-100 p-3 rounded-2xl group-hover:bg-[#0f4c4c] group-hover:text-white transition-colors">
+                    <Folder className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1 text-right">
+                    <p className="text-[10px] font-black text-slate-400 uppercase">مجلد الشواهد الأساسي</p>
+                    <p className="text-sm font-bold text-slate-700">فتح ملفات الموظف للمراجعة</p>
+                  </div>
+                  <ExternalLink className="w-5 h-5 text-slate-300" />
+                </a>
+              ) : (
+                <div className="flex items-center gap-4 bg-slate-50 p-5 rounded-3xl border border-slate-100 opacity-60">
+                   <div className="bg-slate-200 p-3 rounded-2xl"><Folder className="w-6 h-6 text-slate-400" /></div>
+                   <p className="text-xs font-bold text-slate-400 text-right">لا يوجد رابط مجلد أساسي</p>
+                </div>
+              )}
+
+              {staff.drive_link_v2 ? (
+                <a href={staff.drive_link_v2} target="_blank" rel="noreferrer" 
+                   className="flex items-center gap-4 bg-emerald-50 p-5 rounded-3xl border-2 border-emerald-200 shadow-md hover:border-emerald-500 hover:shadow-lg transition-all group">
+                  <div className="bg-emerald-500 p-3 rounded-2xl text-white">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1 text-right">
+                    <div className="flex items-center gap-2 justify-start flex-row-reverse">
+                      <p className="text-[10px] font-black text-emerald-600 uppercase">ملف الشواهد المحدث (V2)</p>
+                      <span className="bg-emerald-500 text-white text-[8px] px-2 py-0.5 rounded-full font-black">جديد</span>
+                    </div>
+                    <p className="text-sm font-bold text-emerald-900">الموظف قام بتحسين ملفه وإرساله</p>
+                  </div>
+                  <ExternalLink className="w-5 h-5 text-emerald-400" />
+                </a>
+              ) : null}
+            </div>
+
             <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-slate-100">
                <table className="w-full text-right">
                  <thead>
@@ -146,23 +184,23 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
                  </thead>
                  <tbody>
                    {criteria.map((c, idx) => (
-                     <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50/80 transition-colors">
+                     <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                       <td className="px-10 py-6 text-sm font-bold text-slate-700 leading-relaxed">{c.text}</td>
+                       <td className="px-10 py-6 text-center text-xs font-black text-[#0f4c4c] bg-[#0f4c4c]/5">{(c.weight * 100).toFixed(0)}%</td>
                        <td className="px-10 py-6">
-                         <div className="flex items-center gap-4">
-                            <span className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-xs font-black text-slate-400">{idx + 1}</span>
-                            <span className="font-bold text-slate-700">{c.text}</span>
-                         </div>
-                       </td>
-                       <td className="px-10 py-6 text-center">
-                          <span className="bg-[#0f4c4c]/5 text-[#0f4c4c] px-4 py-1.5 rounded-full font-black text-sm font-sans">
-                            {(c.weight * 100).toFixed(0)}%
-                          </span>
-                       </td>
-                       <td className="px-10 py-6">
-                         <div className="flex justify-center gap-2" dir="ltr">
-                           {[1, 2, 3, 4, 5].map((n) => (
-                             <button key={n} type="button" onClick={() => setRatings({ ...ratings, [c.id]: n })} className={`w-12 h-12 rounded-2xl font-black text-lg transition-all border-2 ${ratings[c.id] === n ? 'bg-[#0f4c4c] text-white border-[#0f4c4c] scale-110 shadow-lg' : 'bg-white text-slate-300 border-slate-100 hover:border-slate-300'}`}>
-                               {n}
+                         <div className="flex justify-center gap-3" dir="ltr">
+                           {[1, 2, 3, 4, 5].map((v) => (
+                             <button
+                               key={v}
+                               type="button"
+                               onClick={() => setRatings(prev => ({ ...prev, [c.id]: v }))}
+                               className={`w-10 h-10 rounded-xl font-black text-sm transition-all shadow-sm ${
+                                 ratings[c.id] === v
+                                   ? 'bg-[#0f4c4c] text-white scale-110 shadow-lg'
+                                   : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                               }`}
+                             >
+                               {v}
                              </button>
                            ))}
                          </div>
@@ -174,24 +212,41 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
             </div>
           </div>
 
-          <div className="w-[450px] bg-white border-r border-slate-100 p-12 flex flex-col gap-10 shadow-2xl">
-             <div className={`text-center p-10 rounded-[3.5rem] border-4 transition-colors ${percentage >= 60 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
-                <Calculator className={`w-12 h-12 mx-auto mb-4 ${grade.color}`} />
-                <p className="text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">التقدير العام للأداء</p>
-                <div className={`text-4xl font-black mb-2 ${grade.color}`}>{grade.label}</div>
-                <p className="text-[10px] font-bold text-slate-400 italic">بناءً على جمع النتائج الموزونة</p>
-             </div>
+          {/* الشريط الجانبي للملاحظات والإجراءات */}
+          <div className="w-[400px] border-r border-slate-200 p-10 bg-white flex flex-col gap-8">
+            <div className="flex-1 space-y-6">
+              <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                <h3 className="text-sm font-black text-[#0f4c4c] mb-4 flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4" /> توصيات المدير:
+                </h3>
+                <textarea
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder="اكتب ملاحظاتك وتوجيهاتك للموظف هنا..."
+                  className="w-full h-48 p-4 bg-white border border-slate-200 rounded-2xl outline-none text-sm font-bold resize-none focus:border-[#0f4c4c]"
+                />
+              </div>
 
-             <div className="space-y-4">
-                <label className="font-black text-slate-600 text-sm flex items-center gap-2">
-                   <Lightbulb className="w-6 h-6 text-amber-500" /> التوصيات والملاحظات
-                </label>
-                <textarea className="w-full p-8 rounded-[2.5rem] border-2 border-slate-100 focus:border-[#0f4c4c] outline-none h-56 resize-none bg-slate-50/50 text-sm font-bold shadow-inner" placeholder="اكتب توصياتك المهنية للموظف..." value={comments} onChange={(e) => setComments(e.target.value)} />
-             </div>
+              <div className="bg-[#0f4c4c] p-6 rounded-[2rem] text-white">
+                <div className="flex items-center gap-3 mb-2">
+                   <Calculator className="w-4 h-4 text-emerald-400" />
+                   <p className="text-xs font-black uppercase">التصنيف التقديري:</p>
+                </div>
+                <p className={`text-2xl font-black ${grade.color}`}>
+                   {grade.label}
+                </p>
+                <p className="text-[10px] font-bold opacity-60 mt-1">يتم التقييم بناءً على الأوزان النسبية لكل معيار وربطها بسلم الـ 5 نقاط.</p>
+              </div>
+            </div>
 
-             <button onClick={handleSubmit} disabled={submitting} className="mt-auto w-full bg-[#0f4c4c] text-white py-8 rounded-[2.5rem] font-black text-2xl shadow-2xl hover:bg-black transition-all flex items-center justify-center gap-4 active:scale-95">
-                {submitting ? 'جاري الاعتماد...' : 'حفظ واعتـماد التقييم'} <Save className="w-8 h-8" />
-             </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="w-full bg-[#00a18e] text-white py-6 rounded-[2rem] font-black text-lg flex items-center justify-center gap-3 hover:bg-[#008f7e] transition-all shadow-xl active:scale-95 disabled:opacity-50"
+            >
+              {submitting ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
+              اعتماد وحفظ التقييم
+            </button>
           </div>
         </div>
       </div>
