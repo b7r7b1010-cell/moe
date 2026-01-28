@@ -70,10 +70,10 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
   const getGradeInfo = (percentage: number) => {
     let label = 'غير مرضي';
     let color = 'text-red-600';
-    if (percentage >= 90) { label = 'ممتاز'; color = 'text-emerald-600'; }
-    else if (percentage >= 80) { label = 'جيد جداً'; color = 'text-blue-600'; }
-    else if (percentage >= 70) { label = 'جيد'; color = 'text-amber-600'; }
-    else if (percentage >= 60) { label = 'مرضي'; color = 'text-orange-600'; }
+    if (percentage >= 90) { label = 'مثالي'; color = 'text-emerald-600'; }
+    else if (percentage >= 80) { label = 'تخطى التوقعات'; color = 'text-blue-600'; }
+    else if (percentage >= 70) { label = 'وافق التوقعات'; color = 'text-amber-600'; }
+    else if (percentage >= 60) { label = 'بحاجة إلى تطوير'; color = 'text-orange-600'; }
     return { label, color };
   };
 
@@ -190,7 +190,7 @@ const EvaluationModal: React.FC<Props> = ({ staff, onClose }) => {
              <div className={`text-center p-10 rounded-[3.5rem] border-4 transition-colors ${percentage >= 60 ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                 <Calculator className={`w-12 h-12 mx-auto mb-4 ${grade.color}`} />
                 <p className="text-xs font-black text-slate-400 mb-2 uppercase tracking-widest">التقدير العام للأداء</p>
-                <div className={`text-5xl font-black mb-2 ${grade.color}`}>{grade.label}</div>
+                <div className={`text-4xl font-black mb-2 ${grade.color}`}>{grade.label}</div>
                 <p className="text-[10px] font-bold text-slate-400 italic">بناءً على جمع النتائج الموزونة</p>
              </div>
 

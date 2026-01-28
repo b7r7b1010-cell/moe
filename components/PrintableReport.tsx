@@ -16,10 +16,10 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
   const getRating = (percentage: number) => {
     let points = 1;
     let label = 'غير مرضي';
-    if (percentage >= 90) { points = 5; label = 'ممتاز'; }
-    else if (percentage >= 80) { points = 4; label = 'جيد جداً'; }
-    else if (percentage >= 70) { points = 3; label = 'جيد'; }
-    else if (percentage >= 60) { points = 2; label = 'مرضي'; }
+    if (percentage >= 90) { points = 5; label = 'مثالي'; }
+    else if (percentage >= 80) { points = 4; label = 'تخطى التوقعات'; }
+    else if (percentage >= 70) { points = 3; label = 'وافق التوقعات'; }
+    else if (percentage >= 60) { points = 2; label = 'بحاجة إلى تطوير'; }
     else { points = 1; label = 'غير مرضي'; }
     return { label, points: points.toString() };
   };

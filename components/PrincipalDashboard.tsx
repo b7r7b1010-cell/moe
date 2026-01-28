@@ -81,10 +81,10 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
 
   const getGradeInfo = (score: number) => {
     let points = 1; let label = 'غير مرضي';
-    if (score >= 90) { points = 5; label = 'ممتاز'; }
-    else if (score >= 80) { points = 4; label = 'جيد جداً'; }
-    else if (score >= 70) { points = 3; label = 'جيد'; }
-    else if (score >= 60) { points = 2; label = 'مرضي'; }
+    if (score >= 90) { points = 5; label = 'مثالي'; }
+    else if (score >= 80) { points = 4; label = 'تخطى التوقعات'; }
+    else if (score >= 70) { points = 3; label = 'وافق التوقعات'; }
+    else if (score >= 60) { points = 2; label = 'بحاجة إلى تطوير'; }
     return { label, points };
   };
 
@@ -193,8 +193,8 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
                         ) : view === 'active' && (
                           <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl">
                              <div className="text-right">
-                                <p className="text-[10px] text-slate-400 font-bold">النتيجة</p>
-                                <p className="text-lg font-black text-[#0f4c4c]">{info ? `${info.points} / 5` : '--'}</p>
+                                <p className="text-[10px] text-slate-400 font-bold">التقدير</p>
+                                <p className="text-sm font-black text-[#0f4c4c]">{info ? `${info.label}` : '--'}</p>
                              </div>
                              <div className="flex gap-1">
                                 <button onClick={() => openWhatsApp(s, ev)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl"><MessageCircle className="w-5 h-5" /></button>

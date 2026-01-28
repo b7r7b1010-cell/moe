@@ -36,10 +36,10 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
     let points = 1;
     let label = 'غير مرضي';
     let color = 'text-red-600';
-    if (score >= 90) { points = 5; label = 'ممتاز'; color = 'text-emerald-600'; }
-    else if (score >= 80) { points = 4; label = 'جيد جداً'; color = 'text-blue-600'; }
-    else if (score >= 70) { points = 3; label = 'جيد'; color = 'text-amber-600'; }
-    else if (score >= 60) { points = 2; label = 'مرضي'; color = 'text-orange-600'; }
+    if (score >= 90) { points = 5; label = 'مثالي'; color = 'text-emerald-600'; }
+    else if (score >= 80) { points = 4; label = 'تخطى التوقعات'; color = 'text-blue-600'; }
+    else if (score >= 70) { points = 3; label = 'وافق التوقعات'; color = 'text-amber-600'; }
+    else if (score >= 60) { points = 2; label = 'بحاجة إلى تطوير'; color = 'text-orange-600'; }
     return { label, points, color };
   };
 
