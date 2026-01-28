@@ -42,7 +42,7 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
               <p className="font-bold">ثانوية الأمير عبدالمجيد الأولى</p>
             </td>
             <td className="w-1/3 text-center align-middle">
-              <img src="https://up6.cc/2026/01/17695407545291.jpg" className="h-20 mb-2 mx-auto" alt="Logo" />
+              <img src="https://up6.cc/2026/01/176840436497671.png" className="h-20 mb-2 mx-auto" alt="Logo" />
               <h1 className="text-lg font-bold border-b-2 border-black inline-block pb-1">بطاقة الأداء الوظيفي</h1>
             </td>
             <td className="w-1/3 text-left align-top font-sans" style={{ fontSize: '9pt' }}>
