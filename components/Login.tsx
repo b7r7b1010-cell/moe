@@ -34,7 +34,6 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     checkConnection();
   }, []);
 
-  // وظيفة لتحويل الأرقام العربية إلى إنجليزية وإزالة المسافات
   const normalizeMobile = (str: string) => {
     const arabicNums = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
     let normalized = str.trim().replace(/\s/g, '');
@@ -46,12 +45,10 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // توحيد رقم الجوال قبل أي معالجة
     const cleanMobile = normalizeMobile(mobile);
     
     if (!cleanMobile.match(/^05\d{8}$/)) {
-      alert('رقم جوال غير صحيح (يجب أن يبدأ بـ 05 ويتكون من 10 أرقام إنجليزية أو عربية)');
+      alert('رقم جوال غير صحيح. يجب أن يبدأ بـ 05 ويتكون من 10 أرقام.');
       return;
     }
 
@@ -71,19 +68,24 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           password 
         });
         
-        if (authError) throw authError;
+        if (authError) {
+          if (authError.message.includes('already registered')) {
+            throw new Error('هذا الرقم مسجل مسبقاً. إذا كنت قد سجلت بالأرقام العربية سابقاً، يرجى طلب حذف حسابك القديم من مدير المدرسة لتتمكن من التسجيل مجدداً.');
+          }
+          throw authError;
+        }
         
         if (authData.user) {
           const autoApprove = role === UserRole.PRINCIPAL;
           await supabase.from('profiles').upsert({ 
             id: authData.user.id, 
             full_name: fullName, 
-            mobile: cleanMobile, // حفظ الرقم موحداً في قاعدة البيانات
+            mobile: cleanMobile,
             role: role,
             is_approved: autoApprove 
           });
           
-          alert(autoApprove ? 'تم إنشاء حساب المدير بنجاح.' : 'تم تسجيل طلبك بنجاح! حسابك بانتظار موافقة إدارة المدرسة لتفعيل الدخول.');
+          alert(autoApprove ? 'تم إنشاء حساب المدير.' : 'تم تسجيل طلبك! بانتظار موافقة الإدارة.');
           setIsRegistering(false);
         }
       } else {
@@ -92,11 +94,16 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           password 
         });
         
-        if (signInError) throw signInError;
+        if (signInError) {
+          if (signInError.message.includes('Invalid login credentials')) {
+            throw new Error('بيانات الدخول غير صحيحة. ملاحظة: إذا كنت قد سجلت سابقاً بالأرقام العربية، حسابك القديم لم يعد مدعوماً، يرجى طلب حذفه من المدير وإعادة التسجيل.');
+          }
+          throw signInError;
+        }
         onLogin();
       }
     } catch (err: any) {
-      alert('خطأ: ' + err.message);
+      alert(err.message);
     } finally { 
       setLoading(false); 
     }
@@ -141,7 +148,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
                 <div className="space-y-4">
                   <div className="relative">
                     <Phone className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="text" placeholder="رقم الجوال (٠٥... أو 05...)" required className="w-full pr-10 pl-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-sans focus:border-[#0f4c4c] outline-none" value={mobile} onChange={(e) => setMobile(e.target.value)} dir="ltr" />
+                    <input type="text" placeholder="رقم الجوال" required className="w-full pr-10 pl-4 py-3 bg-slate-50 rounded-xl border border-slate-200 text-sm font-sans focus:border-[#0f4c4c] outline-none" value={mobile} onChange={(e) => setMobile(e.target.value)} dir="ltr" />
                   </div>
                   <div className="relative">
                     <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -162,7 +169,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               </div>
             )}
 
-            <button disabled={loading} type="submit" className="w-full bg-[#0f4c4c] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#0d3d3d] transition-all flex items-center justify-center gap-3 active:scale-95 font-cairo">
+            <button disabled={loading} type="submit" className="w-full bg-[#0f4c4c] text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-[#0d3d3d] transition-all flex items-center justify-center gap-3 active:scale-95">
               {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
               {isRegistering ? 'إنشاء حساب جديد' : 'دخول النظام'}
             </button>

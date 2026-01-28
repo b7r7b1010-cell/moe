@@ -6,7 +6,7 @@ import {
   Search, LogOut, Printer, 
   MessageCircle, ShieldCheck, Settings, Sparkles,
   Users, CheckCircle, Clock, FileSearch, UserCheck, X, AlertCircle,
-  UserPlus, UserMinus, ShieldAlert, Check, Loader2
+  UserPlus, UserMinus, ShieldAlert, Check, Loader2, AlertTriangle
 } from 'lucide-react';
 import EvaluationModal from './EvaluationModal';
 import PrintableReport from './PrintableReport';
@@ -33,11 +33,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
         .order('created_at', { ascending: false });
       
       if (fetchError) {
-        if (fetchError.message.includes('is_approved')) {
-          alert("خطأ: عمود 'is_approved' غير موجود. يرجى تنفيذ أمر SQL المذكور.");
-        } else {
-          console.error(fetchError);
-        }
+        console.error(fetchError);
       }
 
       const { data: evalData } = await supabase.from('evaluations').select('*');
@@ -59,51 +55,26 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
 
   const approveUser = async (id: string) => {
     if (!confirm('هل أنت متأكد من اعتماد هذا الحساب؟')) return;
-    
     setProcessingId(id);
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_approved: true })
-        .eq('id', id);
-
-      if (error) {
-        alert('حدث خطأ أثناء الاعتماد: ' + error.message);
-      } else {
-        // تحديث محلي فوري
-        setStaff(prev => prev.map(s => s.id === id ? { ...s, is_approved: true } : s));
-        setProcessingId(null);
-      }
-    } catch (err: any) {
-      alert('خطأ: ' + err.message);
-      setProcessingId(null);
-    }
+    const { error } = await supabase.from('profiles').update({ is_approved: true }).eq('id', id);
+    if (error) alert(error.message);
+    else setStaff(prev => prev.map(s => s.id === id ? { ...s, is_approved: true } : s));
+    setProcessingId(null);
   };
 
   const deleteUser = async (id: string) => {
-    if (!confirm('سيتم حذف طلب هذا المستخدم نهائياً ولن يتمكن من الدخول. هل أنت متأكد؟')) return;
-    
+    if (!confirm('سيتم حذف طلب هذا المستخدم نهائياً. هل أنت متأكد؟')) return;
     setProcessingId(id);
-    try {
-      // 1. حذف الملف الشخصي من جدول profiles
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        throw error;
-      } else {
-        // 2. تحديث الواجهة فوراً بحذف الموظف من القائمة المحلية
-        setStaff(prev => prev.filter(s => s.id !== id));
-        alert('تم حذف الطلب نهائياً.');
-      }
-    } catch (err: any) {
-      alert('فشل الحذف: ' + err.message + '\nتأكد من تنفيذ أمر SQL الخاص بـ DELETE Policy.');
-    } finally {
-      setProcessingId(null);
+    const { error } = await supabase.from('profiles').delete().eq('id', id);
+    if (error) alert(error.message);
+    else {
+      setStaff(prev => prev.filter(s => s.id !== id));
+      alert('تم الحذف. يرجى ملاحظة: يجب عليك أيضاً حذف البريد الإلكتروني لهذا الرقم من قسم Authentication في Supabase ليتمكن الموظف من التسجيل من جديد.');
     }
+    setProcessingId(null);
   };
+
+  const isArabicMobile = (mobile: string) => /[٠-٩]/.test(mobile);
 
   const activeStaff = staff.filter(s => s.is_approved && (s.full_name.includes(searchTerm) || s.mobile.includes(searchTerm)));
   const pendingStaff = staff.filter(s => !s.is_approved);
@@ -131,7 +102,6 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
       message += `لقد تم رصد تقييمك للأداء الوظيفي بنجاح:%0A`;
       message += `النتيجة المئوية: ${ev.total_score}%%0A`;
       message += `التقدير: ${info.label}%0A%0A`;
-      message += `توصيات المدير: %0A${ev.comments || 'نثمن جهودكم المهنية المتميزة.'}%0A%0A`;
     } else {
       message += `نأمل التكرم بتجهيز ملف الشواهد الرقمي الخاص بكم عبر المنصة.%0A%0A`;
     }
@@ -195,101 +165,64 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
                 <Loader2 className="w-12 h-12 text-emerald-600 animate-spin" />
                 <p className="text-slate-400 font-bold">جاري المزامنة...</p>
              </div>
-          ) : view === 'active' ? (
-            <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-400 text-[11px] font-black border-b border-slate-100">
-                  <th className="px-10 py-10 text-right">الموظف</th>
-                  <th className="px-10 py-10 text-right">الشواهد الرقمية</th>
-                  <th className="px-10 py-10 text-center">الدرجة</th>
-                  <th className="px-10 py-10 text-center">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {activeStaff.length === 0 ? (
-                  <tr><td colSpan={4} className="py-20 text-center text-slate-300 italic">لا يوجد موظفون معتمدون</td></tr>
-                ) : activeStaff.map((s) => {
-                  const ev = evaluations[s.id];
-                  const hasV2 = !!s.drive_link_v2;
-                  const info = ev ? getGradeInfo(ev.total_score) : null;
-                  return (
-                    <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-10 py-10">
-                        <div className="flex items-center gap-5">
-                           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm ${hasV2 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-[#0f4c4c]'}`}>{s.full_name.charAt(0)}</div>
-                           <div>
-                             <p className="font-black text-slate-800 text-lg">{s.full_name}</p>
-                             <div className="text-[10px] text-slate-400 font-sans mt-1">{s.role} | {s.mobile}</div>
-                           </div>
-                        </div>
-                      </td>
-                      <td className="px-10 py-10">
-                        <div className="flex flex-col gap-2">
-                          {s.drive_link && <a href={s.drive_link} target="_blank" className="text-[10px] font-black text-slate-500 bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-2 w-fit">المجلد الأساسي</a>}
-                          {hasV2 && <a href={s.drive_link_v2} target="_blank" className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl flex items-center gap-2 w-fit border border-emerald-100 ring-2 ring-emerald-500/20"><AlertCircle className="w-3 h-3" /> مجلد التحسين</a>}
-                        </div>
-                      </td>
-                      <td className="px-10 py-10">
-                        {info ? (
-                           <div className="text-center">
-                              <div className="text-2xl font-black text-[#0f4c4c] font-sans">{info.points}</div>
-                              <div className="text-[10px] font-bold text-slate-400">({info.label})</div>
-                           </div>
-                        ) : <span className="text-slate-200 text-center block">--</span>}
-                      </td>
-                      <td className="px-10 py-10">
-                        <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => setSelectedStaff(s)} className={`px-6 py-3.5 rounded-2xl text-[11px] font-black transition-all shadow-lg flex items-center gap-3 ${hasV2 ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-[#0f4c4c] hover:bg-black text-white'}`}>
-                             <UserCheck className="w-5 h-5" /> {ev ? 'تعديل' : 'تقييم'}
-                          </button>
-                          <button onClick={() => openWhatsApp(s, ev)} className="p-3 text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all"><MessageCircle className="w-6 h-6" /></button>
-                          {ev && <button onClick={() => handlePrint(s, ev)} className="p-3 text-slate-400 hover:bg-slate-100 rounded-2xl transition-all"><Printer className="w-6 h-6" /></button>}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           ) : (
             <div className="p-10">
-              {pendingStaff.length === 0 ? (
-                <div className="text-center py-24 bg-slate-50/50 rounded-[3rem] border-2 border-dashed border-slate-100">
-                   <ShieldCheck className="w-20 h-20 text-slate-100 mx-auto mb-4" />
-                   <p className="text-slate-400 font-black">لا توجد طلبات انضمام جديدة</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                   {pendingStaff.map(s => (
-                     <div key={s.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 flex flex-col gap-6 shadow-sm hover:shadow-xl transition-all group">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(view === 'active' ? activeStaff : pendingStaff).map(s => {
+                  const ev = evaluations[s.id];
+                  const info = ev ? getGradeInfo(ev.total_score) : null;
+                  const corrupted = isArabicMobile(s.mobile);
+                  
+                  return (
+                    <div key={s.id} className={`bg-white p-6 rounded-[2.5rem] border flex flex-col gap-6 shadow-sm hover:shadow-xl transition-all group ${corrupted ? 'border-red-200 bg-red-50/20' : 'border-slate-100'}`}>
                         <div className="flex items-center gap-4">
-                           <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-[#0f4c4c] font-black text-xl shadow-sm group-hover:bg-[#0f4c4c] group-hover:text-white transition-colors">{s.full_name.charAt(0)}</div>
-                           <div className="text-right">
+                           <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm transition-colors ${corrupted ? 'bg-red-100 text-red-600' : 'bg-slate-50 text-[#0f4c4c] group-hover:bg-[#0f4c4c] group-hover:text-white'}`}>{s.full_name.charAt(0)}</div>
+                           <div className="text-right flex-1">
                               <p className="font-black text-slate-800 text-lg leading-tight">{s.full_name}</p>
-                              <p className="text-[11px] text-slate-400 font-bold mt-1">{s.role} | {s.mobile}</p>
+                              <p className={`text-[11px] font-bold mt-1 ${corrupted ? 'text-red-500' : 'text-slate-400'}`}>
+                                {corrupted ? 'حساب تالف (أرقام عربية)' : s.role} | {s.mobile}
+                              </p>
                            </div>
+                           {corrupted && <AlertTriangle className="w-5 h-5 text-red-500 animate-bounce" />}
                         </div>
+
+                        {corrupted ? (
+                          <div className="bg-red-100/50 p-4 rounded-2xl text-[10px] text-red-700 font-bold">
+                            هذا الحساب سجل بأرقام عربية ولن يتمكن من الدخول. يرجى حذفه ليتمكن الموظف من التسجيل من جديد.
+                          </div>
+                        ) : view === 'active' && (
+                          <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl">
+                             <div className="text-right">
+                                <p className="text-[10px] text-slate-400 font-bold">النتيجة</p>
+                                <p className="text-lg font-black text-[#0f4c4c]">{info ? `${info.points} / 5` : '--'}</p>
+                             </div>
+                             <div className="flex gap-1">
+                                <button onClick={() => openWhatsApp(s, ev)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl"><MessageCircle className="w-5 h-5" /></button>
+                                {ev && <button onClick={() => handlePrint(s, ev)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl"><Printer className="w-5 h-5" /></button>}
+                             </div>
+                          </div>
+                        )}
+
                         <div className="flex gap-2">
-                           <button 
-                             disabled={processingId === s.id}
-                             onClick={() => approveUser(s.id)} 
-                             className="flex-1 bg-emerald-600 text-white py-3.5 rounded-2xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
-                           >
-                              {processingId === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                              <span className="text-xs font-black">اعتماد الحساب</span>
-                           </button>
-                           <button 
-                             disabled={processingId === s.id}
-                             onClick={() => deleteUser(s.id)} 
-                             className="bg-red-50 text-red-600 px-4 py-3.5 rounded-2xl hover:bg-red-600 hover:text-white transition disabled:opacity-30 flex items-center justify-center"
-                           >
+                           {!s.is_approved && !corrupted && (
+                             <button disabled={processingId === s.id} onClick={() => approveUser(s.id)} className="flex-1 bg-emerald-600 text-white py-3.5 rounded-2xl hover:bg-emerald-700 transition shadow-lg flex items-center justify-center gap-2">
+                                <Check className="w-5 h-5" /> <span className="text-xs font-black">اعتماد</span>
+                             </button>
+                           )}
+                           {view === 'active' && !corrupted && (
+                             <button onClick={() => setSelectedStaff(s)} className="flex-1 bg-[#0f4c4c] text-white py-3.5 rounded-2xl hover:bg-black transition flex items-center justify-center gap-2">
+                                <UserCheck className="w-5 h-5" /> <span className="text-xs font-black">{ev ? 'تعديل التقييم' : 'تقييم الآن'}</span>
+                             </button>
+                           )}
+                           <button disabled={processingId === s.id} onClick={() => deleteUser(s.id)} className={`px-4 py-3.5 rounded-2xl transition flex items-center justify-center ${corrupted ? 'flex-1 bg-red-600 text-white hover:bg-red-700' : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white'}`}>
                               {processingId === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserMinus className="w-5 h-5" />}
+                              {corrupted && <span className="mr-2 text-xs font-black">حذف الحساب الموحد</span>}
                            </button>
                         </div>
-                     </div>
-                   ))}
-                </div>
-              )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
