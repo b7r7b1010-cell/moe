@@ -114,7 +114,7 @@ const PrintableReport: React.FC<Props> = ({ staff, evaluation, principalName }) 
       {/* الملحوظات والتواقيع */}
       <div className={`mt-2 ${isCondensed ? 'pt-2' : 'pt-4'} border-t-2 border-black`}>
         <div className="mb-4">
-          <p className="font-bold text-[9pt] underline mb-1">توصيات القيادة المدرسية:</p>
+          <p className="font-bold text-[9pt] underline mb-1">توصيات مدير المدرسة:</p>
           <p className={`${isCondensed ? 'text-[9.5pt]' : 'text-[10.5pt]'} italic leading-snug px-2`}>
             "{evaluation.comments || 'نثمن التزامكم المهني، ونحثكم على مواصلة التطوير المستمر للأداء.'}"
           </p>

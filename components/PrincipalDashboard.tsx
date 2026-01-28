@@ -78,7 +78,12 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
     let message = `الأستاذ / ${s.full_name}%0A`;
     if (ev) {
       const info = getGradeInfo(ev.total_score);
-      message += `لقد تم رصد تقييمك للأداء الوظيفي بنجاح:%0Aالتقدير: ${info.label}%0Aالنسبة: ${ev.total_score}%%0A%0A`;
+      message += `لقد تم رصد تقييمك للأداء الوظيفي بنجاح:%0Aالتقدير: ${info.label}%0Aالنسبة: ${ev.total_score}%%0A`;
+      if (ev.comments) {
+        message += `توصيات المدير: ${ev.comments}%0A%0A`;
+      } else {
+        message += `%0A`;
+      }
     } else {
       message += `نأمل التكرم بتجهيز ملف الشواهد الرقمي الخاص بكم عبر المنصة.%0A%0A`;
     }

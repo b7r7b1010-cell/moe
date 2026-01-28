@@ -180,7 +180,7 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
                 <Lightbulb className="w-6 h-6 text-emerald-400" />
              </div>
              <div className="flex-1">
-                <p className="text-[10px] font-bold opacity-60 mb-1 tracking-widest uppercase">توصيات القيادة المدرسية:</p>
+                <p className="text-[10px] font-bold opacity-60 mb-1 tracking-widest uppercase">توصيات مدير المدرسة:</p>
                 <p className="text-sm font-black italic">"{lastEval.comments || 'نثمن جهودكم المهنية المتميزة، وننصح بالاستمرار على هذا النهج التطويري.'}"</p>
              </div>
           </div>
