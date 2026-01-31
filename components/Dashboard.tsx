@@ -232,7 +232,10 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
         <footer className="pt-10 pb-6 space-y-12">
            <div className="flex flex-col items-center justify-center gap-4">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">تحتاج مساعدة؟</p>
-              <a href="https://wa.me/966559945045" target="_blank" rel="noreferrer" 
+              <a href="https://wa.me/966559945045?text=السلام عليكم، أحتاج مساعدة في المنصة"
+  target="_blank" 
+  rel="noreferrer" 
+  className="flex items-center gap-4 bg-[#25D366] target="_blank" rel="noreferrer" 
                  className="flex items-center gap-4 bg-[#25D366] text-white px-10 py-5 rounded-[2.5rem] font-black shadow-xl hover:bg-[#128C7E] transition-all active:scale-95 group ring-8 ring-[#25D366]/10">
                  <div className="bg-white/20 p-2 rounded-xl">
                     <PhoneCall className="w-6 h-6" />
