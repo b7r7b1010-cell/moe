@@ -233,9 +233,8 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
            <div className="flex flex-col items-center justify-center gap-4">
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">تحتاج مساعدة؟</p>
               <a href="https://wa.me/966559945045?text=السلام عليكم، أحتاج مساعدة في المنصة"
-  target="_blank" 
-  rel="noreferrer" 
-  className="flex items-center gap-4 bg-[#25D366] target="_blank" rel="noreferrer" 
+                 target="_blank" 
+                 rel="noreferrer" 
                  className="flex items-center gap-4 bg-[#25D366] text-white px-10 py-5 rounded-[2.5rem] font-black shadow-xl hover:bg-[#128C7E] transition-all active:scale-95 group ring-8 ring-[#25D366]/10">
                  <div className="bg-white/20 p-2 rounded-xl">
                     <PhoneCall className="w-6 h-6" />
@@ -256,7 +255,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                      الأستاذ: <span className="text-[#0f4c4c] relative">عبدالله الشهري <span className="absolute bottom-0 left-0 w-full h-1 bg-[#00a18e]/20 -rotate-1"></span></span>
                    </p>
                  </div>
-                 {/* تم تغيير أيقونة القلب إلى لابتوب هنا */}
+                 {/* تم تغيير أيقونة القلب إلى لابتوب هنا وتغيير لونه للكهرماني */}
                  <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-amber-500">
                     <Laptop className="w-5 h-5" />
                  </div>
