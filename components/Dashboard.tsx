@@ -254,7 +254,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                    </p>
                  </div>
                  {/* تم تغيير أيقونة القلب إلى لابتوب هنا */}
-                 <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-[#0f4c4c]">
+                 <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-amber-500">
                     <Laptop className="w-5 h-5" />
                  </div>
               </div>
