@@ -4,11 +4,9 @@ import { supabase } from '../supabase';
 import { Profile, Evaluation } from '../types';
 import { 
   LogOut, ExternalLink, ShieldAlert, 
-  Link as LinkIcon, BookOpen, 
-  CheckCircle2, FileCheck, ChevronLeft,
-  LayoutTemplate, MousePointer2, Trash2, 
-  Lock, Clock, ShieldCheck, Info, Sparkles, Send, Lightbulb,
-  FileSpreadsheet, FileText, LayoutDashboard, AlertTriangle
+  Link as LinkIcon, CheckCircle2, 
+  Lock, ShieldCheck, Info, Sparkles, Send, Lightbulb,
+  FileSpreadsheet, FileText, LayoutDashboard, SendHorizontal, Unlock
 } from 'lucide-react';
 
 const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
@@ -16,6 +14,7 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
   const [driveLinkV2, setDriveLinkV2] = useState(userProfile.drive_link_v2 || '');
   const [saving, setSaving] = useState(false);
   const [lastEval, setLastEval] = useState<Evaluation | null>(null);
+  const [isReady, setIsReady] = useState(userProfile.is_ready_for_eval || false);
 
   useEffect(() => {
     fetchLatestEvaluation();
@@ -30,6 +29,11 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
       .limit(1)
       .single();
     if (evalData) setLastEval(evalData);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.reload(); // ضمان الخروج التام في كروم وسفاري
   };
 
   const getGradeInfo = (score: number) => {
@@ -52,7 +56,22 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
     setSaving(false);
   };
 
+  const handleFinalSubmit = async () => {
+    if (!driveLink) {
+      alert('الرجاء إضافة رابط المجلد أولاً');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('profiles').update({ is_ready_for_eval: true }).eq('id', userProfile.id);
+    if (!error) {
+      setIsReady(true);
+      alert('تم إرسال تنبيه للمدير بجاهزية ملفك للتقييم بنجاح.');
+    }
+    setSaving(false);
+  };
+
   const grade = lastEval ? getGradeInfo(lastEval.total_score) : null;
+  const isEvaluated = !!lastEval;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-20 font-cairo text-right" dir="rtl">
@@ -72,13 +91,35 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
                 <p className="text-[10px] opacity-70 font-bold">مرحباً بك،</p>
                 <p className="text-sm font-black">{userProfile.full_name}</p>
               </div>
-              <button onClick={() => supabase.auth.signOut()} className="text-red-300 hover:text-red-100 text-[10px] font-bold flex items-center gap-1 transition-colors">
+              <button onClick={handleLogout} className="text-red-300 hover:text-red-100 text-[10px] font-bold flex items-center gap-1 transition-colors">
                 <LogOut className="w-3 h-3" /> تسجيل الخروج
               </button>
            </div>
         </div>
       </header>
+
       <main className="max-w-7xl mx-auto px-4 -mt-10 space-y-6 relative z-20">
+        {/* قسم تنبيه الجاهزية */}
+        {!isEvaluated && (
+          <div className={`bg-white p-6 rounded-[2.5rem] shadow-xl border-2 transition-all flex flex-col md:flex-row items-center justify-between gap-6 ${isReady ? 'border-emerald-500 bg-emerald-50/30' : 'border-amber-200'}`}>
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isReady ? 'bg-emerald-500 text-white animate-bounce' : 'bg-amber-100 text-amber-600'}`}>
+                {isReady ? <CheckCircle2 /> : <SendHorizontal />}
+              </div>
+              <div className="text-right">
+                <h3 className="text-lg font-black text-slate-800">{isReady ? 'ملفك جاهز للتقييم الآن' : 'هل انتهيت من تجهيز شواهدك؟'}</h3>
+                <p className="text-xs font-bold text-slate-500">{isReady ? 'تم إرسال إشعار للمدير بانتهاء العمل على ملفك.' : 'بمجرد الضغط على زر الإرسال النهائي، سيتم إشعار المدير بأن ملفك جاهز للتقييم.'}</p>
+              </div>
+            </div>
+            {!isReady && (
+              <button onClick={handleFinalSubmit} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black shadow-lg transition-all flex items-center gap-2 active:scale-95">
+                إرسال نهائي للمدير <SendHorizontal className="w-4 h-4" />
+              </button>
+            )}
+            {isReady && <span className="bg-emerald-100 text-emerald-700 px-6 py-3 rounded-xl font-black text-sm">تم الإرسال بنجاح</span>}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
              <a href="https://majestic-basbousa-9de5cc.netlify.app/" target="_blank" rel="noreferrer" 
@@ -109,21 +150,9 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
              </div>
           </div>
         </div>
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border border-slate-200 text-center relative overflow-hidden group">
-           <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 ring-4 ring-amber-50 shadow-inner transition-transform group-hover:scale-110">
-              <ShieldAlert className="w-8 h-8 text-amber-600" />
-           </div>
-           <h2 className="text-2xl font-black text-amber-900 mb-2 flex items-center justify-center gap-2">
-              تنبيه أمني هام جداً! <Lock className="w-5 h-5" />
-           </h2>
-           <p className="text-slate-600 font-bold mb-4">لضمان نجاح التقييم، يجب ضبط إعدادات المشاركة للمجلد لتكون:</p>
-           <p className="text-xl md:text-3xl font-black text-red-600 mb-8 uppercase tracking-tighter">"أي شخص لديه الرابط" (Anyone with the link)</p>
-           <div className="max-w-lg mx-auto bg-slate-100 p-3 rounded-[2rem] border-2 border-dashed border-slate-300 relative">
-              <img src="https://up6.cc/2026/01/17695116652711.png" className="w-full h-auto rounded-2xl shadow-lg border-4 border-white" alt="Drive Permissions Guide" />
-           </div>
-        </div>
+
         {lastEval && (
-          <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border-2 border-[#0f4c4c]/5 flex flex-col md:flex-row items-center gap-8">
+          <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border-2 border-[#0f4c4c]/5 flex flex-col md:flex-row items-center gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
              <div className="relative w-24 h-24 flex items-center justify-center flex-shrink-0">
                 <svg className="w-full h-full -rotate-90">
                    <circle cx="48" cy="48" r="42" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-100" />
@@ -147,30 +176,37 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
              </div>
           </div>
         )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className={`bg-white p-6 rounded-[2.5rem] shadow-lg border border-slate-200 ${lastEval ? 'opacity-60 pointer-events-none' : ''}`}>
+          <div className={`bg-white p-6 rounded-[2.5rem] shadow-lg border border-slate-200 transition-all ${isEvaluated ? 'ring-4 ring-slate-100' : 'hover:shadow-xl'}`}>
              <div className="flex justify-between items-center mb-4">
-                <div className="bg-slate-100 p-2 rounded-xl"><LinkIcon className="text-slate-400 w-5 h-5" /></div>
-                <span className="text-[9px] font-black bg-slate-100 px-3 py-1 rounded-full text-slate-500">المجلد الأساسي</span>
+                <div className={`p-2 rounded-xl ${isEvaluated ? 'bg-red-50 text-red-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                  {isEvaluated ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[9px] font-black bg-slate-100 px-3 py-1 rounded-full text-slate-500 uppercase">المجلد الأساسي</span>
+                  {isEvaluated && <span className="text-[8px] font-bold text-red-500 mt-1">مقفل (تم التقييم)</span>}
+                </div>
              </div>
-             <input type="url" disabled={!!lastEval} value={driveLink} onChange={(e) => setDriveLink(e.target.value)} placeholder="رابط Google Drive..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-sans text-xs dir-ltr mb-4" />
-             {!lastEval && (
+             <input type="url" disabled={isEvaluated} value={driveLink} onChange={(e) => setDriveLink(e.target.value)} placeholder="رابط Google Drive..." className={`w-full p-4 border rounded-2xl outline-none font-sans text-xs dir-ltr mb-4 transition-all ${isEvaluated ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50 border-slate-200 focus:border-[#0f4c4c]'}`} />
+             {!isEvaluated && (
                <button onClick={() => handleUpdateLink(false)} disabled={saving} className="w-full bg-[#0f4c4c] text-white py-3 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-black transition-all shadow-lg active:scale-95">
-                 <Send className="w-4 h-4" /> اعتماد المجلد
+                 <Send className="w-4 h-4" /> حفظ وتحديث الرابط
                </button>
              )}
           </div>
-          <div className={`bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-emerald-500 relative overflow-hidden ${!lastEval ? 'opacity-30 grayscale pointer-events-none' : ''}`}>
+          <div className={`bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-emerald-500 relative overflow-hidden ${!isEvaluated ? 'opacity-30 grayscale pointer-events-none' : ''}`}>
              <div className="flex justify-between items-center mb-4">
                 <div className="bg-emerald-50 p-2 rounded-xl"><Sparkles className="text-emerald-500 w-5 h-5" /></div>
                 <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full uppercase tracking-tighter">تحسين الأداء</span>
              </div>
              <input type="url" value={driveLinkV2} onChange={(e) => setDriveLinkV2(e.target.value)} placeholder="رابط المجلد الجديد (بعد التحسين)..." className="w-full p-4 bg-emerald-50 border border-emerald-200 rounded-2xl outline-none font-sans text-xs dir-ltr mb-4" />
              <button onClick={() => handleUpdateLink(true)} disabled={saving} className="w-full bg-emerald-600 text-white py-3 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg active:scale-95">
-                <ChevronLeft className="w-4 h-4" /> إرسال نسخة المراجعة
+                تحديث نسخة المراجعة <CheckCircle2 className="w-4 h-4" />
              </button>
           </div>
         </div>
+
         {lastEval && (
           <div className="bg-[#0f4c4c] p-6 rounded-[2.5rem] text-white shadow-xl flex items-center gap-5 border-4 border-white/5">
              <div className="bg-white/10 p-3 rounded-2xl flex-shrink-0">

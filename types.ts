@@ -20,7 +20,8 @@ export interface Profile {
   role: UserRole;
   drive_link?: string;
   drive_link_v2?: string; 
-  is_approved: boolean; // الحقل الجديد للتحكم في الاعتماد
+  is_approved: boolean; 
+  is_ready_for_eval?: boolean; // حقل جديد للإشعار بجاهزية الملف
   created_at: string;
 }
 
