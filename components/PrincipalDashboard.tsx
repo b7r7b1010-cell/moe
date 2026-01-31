@@ -13,7 +13,7 @@ import {
 import EvaluationModal from './EvaluationModal';
 import PrintableReport from './PrintableReport';
 
-const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
+const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
   const [staff, setStaff] = useState<Profile[]>([]);
   const [evaluations, setEvaluations] = useState<Record<string, Evaluation>>({});
   const [loading, setLoading] = useState(true);
@@ -41,11 +41,6 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
         setEvaluations(evalMap);
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.reload(); // ضمان الخروج الفعلي في كروم وسفاري
   };
 
   const approveUser = async (id: string) => {
@@ -139,8 +134,8 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile }> = ({ userProfile })
                 <p className="text-[10px] opacity-70 font-bold text-emerald-400">المدير المسؤول،</p>
                 <p className="text-sm font-black">{userProfile.full_name}</p>
               </div>
-              <button onClick={handleLogout} className="text-red-300 hover:text-red-100 text-[10px] font-bold flex items-center gap-1 transition-colors">
-                <LogOut className="w-3 h-3" /> تسجيل الخروج
+              <button onClick={onLogout} className="text-red-300 hover:text-red-100 text-[10px] font-bold flex items-center gap-1 transition-colors group">
+                <LogOut className="w-3 h-3 group-hover:-translate-x-1 transition-transform" /> تسجيل الخروج
               </button>
            </div>
         </div>

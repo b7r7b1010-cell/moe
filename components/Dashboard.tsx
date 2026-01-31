@@ -7,10 +7,10 @@ import {
   Link as LinkIcon, CheckCircle2, 
   Lock, ShieldCheck, Info, Sparkles, Send, Lightbulb,
   FileSpreadsheet, FileText, LayoutDashboard, SendHorizontal, Unlock,
-  MessageSquare, UserCircle, Heart, Palette
+  MessageSquare, UserCircle, Heart, Palette, PhoneCall
 } from 'lucide-react';
 
-const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
+const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
   const [driveLink, setDriveLink] = useState(userProfile.drive_link || '');
   const [driveLinkV2, setDriveLinkV2] = useState(userProfile.drive_link_v2 || '');
   const [saving, setSaving] = useState(false);
@@ -32,11 +32,6 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
     if (evalData) setLastEval(evalData);
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.reload(); 
-  };
-
   const getGradeInfo = (score: number) => {
     if (score >= 90) return { label: 'مثالي', points: 5, color: 'text-emerald-600' };
     if (score >= 80) return { label: 'تخطى التوقعات', points: 4, color: 'text-blue-600' };
@@ -51,7 +46,7 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
     const { error } = await supabase.from('profiles').update(updateData).eq('id', userProfile.id);
     if (error) alert(error.message);
     else {
-      alert('تم تحديث الرابط بنجاح');
+      alert('✅ تم تحديث الرابط بنجاح');
       fetchLatestEvaluation();
     }
     setSaving(false);
@@ -96,8 +91,8 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
                 <p className="text-[10px] opacity-70 font-bold">مرحباً بك،</p>
                 <p className="text-sm font-black">{userProfile.full_name}</p>
               </div>
-              <button onClick={handleLogout} className="text-red-300 hover:text-red-100 text-[10px] font-bold flex items-center gap-1 transition-colors">
-                <LogOut className="w-3 h-3" /> تسجيل الخروج
+              <button onClick={onLogout} className="text-red-300 hover:text-red-100 text-[10px] font-bold flex items-center gap-1 transition-colors group">
+                <LogOut className="w-3 h-3 group-hover:-translate-x-1 transition-transform" /> تسجيل الخروج
               </button>
            </div>
         </div>
@@ -137,47 +132,47 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
           </div>
         </div>
 
-        {/* التقييم والتوصيات (أعلى المجلدات حسب الطلب) */}
+        {/* 1. التقييم (أولاً) */}
         {lastEval && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border-2 border-[#0f4c4c]/5 flex flex-col md:flex-row items-center gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-               <div className="relative w-24 h-24 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-full h-full -rotate-90">
-                     <circle cx="48" cy="48" r="42" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-100" />
-                     <circle cx="48" cy="48" r="42" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={264} strokeDashoffset={264 - (264 * lastEval.total_score) / 100} className={`${grade?.color.replace('text-', 'stroke-')} transition-all duration-1000`} strokeLinecap="round" />
-                  </svg>
-                  <div className="absolute flex flex-col items-center">
-                     <span className="text-2xl font-black text-[#0f4c4c]">{(lastEval.total_score / 20).toFixed(2)}</span>
-                     <span className="text-[8px] font-bold text-slate-400">من 5</span>
-                  </div>
-               </div>
-               <div className="flex-1 text-center md:text-right">
-                  <div className="flex items-center gap-3 mb-1 justify-center md:justify-start">
-                     <h2 className={`text-xl font-black ${grade?.color}`}>مستوى الأداء: {grade?.label} ({grade?.points} من 5)</h2>
-                     <span className="bg-slate-100 px-3 py-1 rounded-full text-[10px] font-bold text-slate-500">{lastEval.total_score}%</span>
-                  </div>
-                  <p className="text-xs text-slate-500 font-bold">تم اعتماد تقييم أدائكم الوظيفي بناءً على الشواهد المرفقة والممارسات المهنية.</p>
-               </div>
-               <div className="bg-emerald-50 px-6 py-3 rounded-2xl border border-emerald-100 text-center">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
-                  <p className="text-[10px] font-black text-emerald-800">الاعتماد: نهائي</p>
-               </div>
-            </div>
-
-            {/* توصيات المدير - تحت التقييم مباشرة */}
-            <div className="bg-[#0f4c4c] p-6 rounded-[2.5rem] text-white shadow-xl flex items-center gap-5 border-4 border-white/5 animate-in zoom-in-95 duration-500">
-               <div className="bg-white/10 p-3 rounded-2xl flex-shrink-0">
-                  <Lightbulb className="w-6 h-6 text-emerald-400" />
-               </div>
-               <div className="flex-1">
-                  <p className="text-[10px] font-bold opacity-60 mb-1 tracking-widest uppercase">توصيات مدير المدرسة:</p>
-                  <p className="text-sm font-black italic">"{lastEval.comments || 'نثمن جهودكم المهنية المتميزة، وننصح بالاستمرار على هذا النهج التطويري.'}"</p>
-               </div>
-            </div>
+          <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border-2 border-[#0f4c4c]/5 flex flex-col md:flex-row items-center gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+             <div className="relative w-24 h-24 flex items-center justify-center flex-shrink-0">
+                <svg className="w-full h-full -rotate-90">
+                   <circle cx="48" cy="48" r="42" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-100" />
+                   <circle cx="48" cy="48" r="42" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={264} strokeDashoffset={264 - (264 * lastEval.total_score) / 100} className={`${grade?.color.replace('text-', 'stroke-')} transition-all duration-1000`} strokeLinecap="round" />
+                </svg>
+                <div className="absolute flex flex-col items-center">
+                   <span className="text-2xl font-black text-[#0f4c4c]">{(lastEval.total_score / 20).toFixed(2)}</span>
+                   <span className="text-[8px] font-bold text-slate-400">من 5</span>
+                </div>
+             </div>
+             <div className="flex-1 text-center md:text-right">
+                <div className="flex items-center gap-3 mb-1 justify-center md:justify-start">
+                   <h2 className={`text-xl font-black ${grade?.color}`}>مستوى الأداء: {grade?.label} ({grade?.points} من 5)</h2>
+                   <span className="bg-slate-100 px-3 py-1 rounded-full text-[10px] font-bold text-slate-500">{lastEval.total_score}%</span>
+                </div>
+                <p className="text-xs text-slate-500 font-bold">تم اعتماد تقييم أدائكم الوظيفي بناءً على الشواهد المرفقة والممارسات المهنية.</p>
+             </div>
+             <div className="bg-emerald-50 px-6 py-3 rounded-2xl border border-emerald-100 text-center">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
+                <p className="text-[10px] font-black text-emerald-800">الاعتماد: نهائي</p>
+             </div>
           </div>
         )}
 
-        {/* المجلد الأساسي والتحسين */}
+        {/* 2. توصيات المدير (ثانياً - تحت التقييم مباشرة) */}
+        {lastEval && (
+          <div className="bg-[#0f4c4c] p-6 rounded-[2.5rem] text-white shadow-xl flex items-center gap-5 border-4 border-white/5 animate-in zoom-in-95 duration-500">
+             <div className="bg-white/10 p-3 rounded-2xl flex-shrink-0">
+                <Lightbulb className="w-6 h-6 text-emerald-400" />
+             </div>
+             <div className="flex-1">
+                <p className="text-[10px] font-bold opacity-60 mb-1 tracking-widest uppercase">توصيات مدير المدرسة:</p>
+                <p className="text-sm font-black italic">"{lastEval.comments || 'نثمن جهودكم المهنية المتميزة، وننصح بالاستمرار على هذا النهج التطويري.'}"</p>
+             </div>
+          </div>
+        )}
+
+        {/* 3. المجلدات (ثالثاً) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className={`bg-white p-6 rounded-[2.5rem] shadow-lg border border-slate-200 transition-all ${isEvaluated ? 'ring-4 ring-slate-100' : 'hover:shadow-xl'}`}>
              <div className="flex justify-between items-center mb-4">
@@ -208,7 +203,7 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
           </div>
         </div>
 
-        {/* قسم الإرسال النهائي للمدير - في أسفل الصفحة حسب الطلب */}
+        {/* 4. الإرسال النهائي (رابعاً - أسفل المجلدات) */}
         {!isEvaluated && (
           <div className={`bg-white p-8 rounded-[3rem] shadow-2xl border-2 transition-all flex flex-col items-center text-center gap-6 ${isReady ? 'border-emerald-500 bg-emerald-50/20' : 'border-amber-200 ring-8 ring-amber-50'}`}>
             <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center shadow-lg transition-all ${isReady ? 'bg-emerald-500 text-white animate-bounce' : 'bg-amber-100 text-amber-600'}`}>
@@ -219,7 +214,7 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
               <p className="text-sm font-bold text-slate-500 max-w-md mx-auto">
                 {isReady 
                   ? 'ملفك الآن تحت مراجعة الإدارة، ستصلك رسالة عبر الواتساب فور رصد التقييم.' 
-                  : 'بمجرد الضغط على زر الإرسال، سيتم تغيير حالتك في لوحة تحكم المدير إلى "جاهز للتقييم" ليبدأ بمراجعة ملفك.'}
+                  : 'بمجرد الضغط على زر الإرسال، سيتم تغيير حالتك في لوحة تحكم المدير ليبدأ بمراجعة ملفك.'}
               </p>
             </div>
             {!isReady ? (
@@ -227,34 +222,47 @@ const Dashboard: React.FC<{ userProfile: Profile }> = ({ userProfile }) => {
                 إرسال نهائي للمدير <SendHorizontal className="w-6 h-6 group-hover:translate-x-[-4px] transition-transform" />
               </button>
             ) : (
-              <div className="flex items-center gap-2 text-emerald-600 bg-emerald-100 px-8 py-4 rounded-2xl font-black">
-                <CheckCircle2 className="w-5 h-5" /> تم إرسال ملفك للاعتماد
+              <div className="flex items-center gap-2 text-emerald-600 bg-emerald-100 px-8 py-4 rounded-2xl font-black shadow-sm">
+                <CheckCircle2 className="w-5 h-5" /> تم إرسال ملفك للاعتماد بنجاح
               </div>
             )}
           </div>
         )}
 
         {/* فوتر الدعم الفني وتوقيع المصمم */}
-        <footer className="pt-10 pb-6 space-y-8">
-           <div className="flex flex-col md:flex-row items-center justify-center gap-6">
+        <footer className="pt-10 pb-6 space-y-12">
+           <div className="flex flex-col items-center justify-center gap-4">
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">تحتاج مساعدة؟</p>
               <a href="https://wa.me/966559945045" target="_blank" rel="noreferrer" 
-                 className="flex items-center gap-4 bg-white border-2 border-emerald-500 text-emerald-600 px-8 py-4 rounded-[2rem] font-black shadow-lg hover:bg-emerald-500 hover:text-white transition-all active:scale-95 group">
-                 <div className="bg-emerald-100 text-emerald-600 p-2 rounded-xl group-hover:bg-white transition-colors">
-                    <MessageSquare className="w-5 h-5" />
+                 className="flex items-center gap-4 bg-[#25D366] text-white px-10 py-5 rounded-[2.5rem] font-black shadow-xl hover:bg-[#128C7E] transition-all active:scale-95 group ring-8 ring-[#25D366]/10">
+                 <div className="bg-white/20 p-2 rounded-xl">
+                    <PhoneCall className="w-6 h-6" />
                  </div>
-                 <span>الدعم الفني والتقني</span>
+                 <div className="text-right">
+                    <p className="text-[10px] opacity-80 leading-none">تواصل مباشر</p>
+                    <p className="text-lg">الدعم الفني والتقني</p>
+                 </div>
               </a>
            </div>
 
-           <div className="flex flex-col items-center justify-center gap-2 pt-6 border-t border-slate-200">
-              <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-full shadow-md border border-slate-100 group">
-                 <Palette className="w-5 h-5 text-amber-500 group-hover:rotate-12 transition-transform" />
-                 <p className="text-sm font-black text-slate-600">
-                   تصميم الأستاذ: <span className="text-[#0f4c4c] font-black underline underline-offset-4 decoration-amber-400">عبدالله الشهري</span>
-                 </p>
-                 <Heart className="w-4 h-4 text-red-500 animate-pulse" fill="currentColor" />
+           <div className="flex flex-col items-center justify-center gap-4 pt-8 border-t border-slate-200">
+              <div className="flex items-center gap-4 bg-white px-8 py-4 rounded-full shadow-xl border border-slate-100 group hover:shadow-2xl transition-all">
+                 <Palette className="w-6 h-6 text-amber-500 group-hover:rotate-12 transition-transform" />
+                 <div className="text-right">
+                   <p className="text-[10px] font-bold text-slate-400 leading-none mb-1 uppercase">إبداع وتطوير</p>
+                   <p className="text-base font-black text-slate-700">
+                     الأستاذ: <span className="text-[#0f4c4c] relative">عبدالله الشهري <span className="absolute bottom-0 left-0 w-full h-1 bg-[#00a18e]/20 -rotate-1"></span></span>
+                   </p>
+                 </div>
+                 <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-red-500">
+                    <Heart className="w-5 h-5 animate-pulse" fill="currentColor" />
+                 </div>
               </div>
-              <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">ثانوية الأمير عبدالمجيد الأولى - 2025</p>
+              <div className="flex items-center gap-2 opacity-30">
+                 <div className="h-px w-8 bg-slate-400"></div>
+                 <p className="text-[8px] font-black text-slate-400 tracking-[0.3em] uppercase">Majeed School Performance 2025</p>
+                 <div className="h-px w-8 bg-slate-400"></div>
+              </div>
            </div>
         </footer>
 

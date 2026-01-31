@@ -20,10 +20,7 @@ function App() {
       const { data, error } = await supabase.auth.getSession();
       
       if (error) {
-        console.error('Session error:', error.message);
-        await supabase.auth.signOut();
-        setSession(null);
-        setLoading(false);
+        handleGlobalLogout();
         return;
       }
 
@@ -37,10 +34,19 @@ function App() {
       if (err.message?.includes('fetch')) {
         setConnectionError(true);
       } else {
-        await supabase.auth.signOut();
+        handleGlobalLogout();
       }
       setLoading(false);
     }
+  };
+
+  const handleGlobalLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.clear();
+    sessionStorage.clear();
+    setSession(null);
+    setProfile(null);
+    // لا نستخدم location.replace لتجنب الـ 404 في قوقل استوديو
   };
 
   useEffect(() => {
@@ -112,7 +118,6 @@ function App() {
 
   if (!session) return <Login onLogin={() => {}} />;
 
-  // شاشة بانتظار الموافقة (تظهر للمستخدمين المسجلين حديثاً)
   if (profile && !profile.is_approved && profile.role !== UserRole.PRINCIPAL) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 font-cairo text-right" dir="rtl">
@@ -129,7 +134,7 @@ function App() {
              <button onClick={initApp} className="w-full bg-slate-800 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-black transition shadow-lg">
                 <RefreshCw className="w-4 h-4" /> تحديث حالة الطلب
              </button>
-             <button onClick={() => supabase.auth.signOut()} className="w-full text-red-600 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition">
+             <button onClick={handleGlobalLogout} className="w-full text-red-600 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition">
                 <LogOut className="w-4 h-4" /> تسجيل الخروج
              </button>
            </div>
@@ -148,9 +153,9 @@ function App() {
   }
 
   return profile?.role === UserRole.PRINCIPAL ? (
-    <PrincipalDashboard userProfile={profile} />
+    <PrincipalDashboard userProfile={profile} onLogout={handleGlobalLogout} />
   ) : (
-    <Dashboard userProfile={profile!} />
+    <Dashboard userProfile={profile!} onLogout={handleGlobalLogout} />
   );
 }
 
