@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Profile, Evaluation } from '../types';
@@ -7,7 +6,7 @@ import {
   Link as LinkIcon, CheckCircle2, 
   Lock, ShieldCheck, Info, Sparkles, Send, Lightbulb,
   FileSpreadsheet, FileText, LayoutDashboard, SendHorizontal, Unlock,
-  MessageSquare, UserCircle, Heart, Palette, PhoneCall
+  MessageSquare, UserCircle, Palette, PhoneCall, Laptop // تم إضافة Laptop هنا
 } from 'lucide-react';
 
 const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
@@ -118,16 +117,16 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                <Info className="w-5 h-5 text-[#0f4c4c]" /> آلية العمل الصحيحة:
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {[
-                  { t: 'تعبئة البيانات بالمنصة الخارجية.', i: FileText },
-                  { t: 'حفظ التقرير بصيغة PDF.', i: FileSpreadsheet },
-                  { t: 'رفعه لمجلد Google Drive الخاص بك.', i: LinkIcon }
-                ].map((s, idx) => (
-                  <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                    <span className="w-7 h-7 bg-[#0f4c4c] text-white rounded-full flex items-center justify-center text-xs font-black">{idx + 1}</span>
-                    <p className="text-xs font-bold text-slate-600 leading-tight">{s.t}</p>
-                  </div>
-                ))}
+               {[
+                 { t: 'تعبئة البيانات بالمنصة الخارجية.', i: FileText },
+                 { t: 'حفظ التقرير بصيغة PDF.', i: FileSpreadsheet },
+                 { t: 'رفعه لمجلد Google Drive الخاص بك.', i: LinkIcon }
+               ].map((s, idx) => (
+                 <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                   <span className="w-7 h-7 bg-[#0f4c4c] text-white rounded-full flex items-center justify-center text-xs font-black">{idx + 1}</span>
+                   <p className="text-xs font-bold text-slate-600 leading-tight">{s.t}</p>
+                 </div>
+               ))}
              </div>
           </div>
         </div>
@@ -198,7 +197,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
              </div>
              <input type="url" value={driveLinkV2} onChange={(e) => setDriveLinkV2(e.target.value)} placeholder="رابط المجلد الجديد (بعد التحسين)..." className="w-full p-4 bg-emerald-50 border border-emerald-200 rounded-2xl outline-none font-sans text-xs dir-ltr mb-4" />
              <button onClick={() => handleUpdateLink(true)} disabled={saving} className="w-full bg-emerald-600 text-white py-3 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-lg active:scale-95">
-                تحديث نسخة المراجعة <CheckCircle2 className="w-4 h-4" />
+               تحديث نسخة المراجعة <CheckCircle2 className="w-4 h-4" />
              </button>
           </div>
         </div>
@@ -254,13 +253,14 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                      الأستاذ: <span className="text-[#0f4c4c] relative">عبدالله الشهري <span className="absolute bottom-0 left-0 w-full h-1 bg-[#00a18e]/20 -rotate-1"></span></span>
                    </p>
                  </div>
-                 <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-red-500">
-                    <Heart className="w-5 h-5 animate-pulse" fill="currentColor" />
+                 {/* تم تغيير أيقونة القلب إلى لابتوب هنا */}
+                 <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-[#0f4c4c]">
+                    <Laptop className="w-5 h-5" />
                  </div>
               </div>
               <div className="flex items-center gap-2 opacity-30">
                  <div className="h-px w-8 bg-slate-400"></div>
-                 <p className="text-[8px] font-black text-slate-400 tracking-[0.3em] uppercase">Majeed School Performance 2025</p>
+                 <p className="text-[8px] font-black text-slate-400 tracking-[0.3em] uppercase">ثانوية الأمير عبدالمجيد الأولى 2026</p>
                  <div className="h-px w-8 bg-slate-400"></div>
               </div>
            </div>
