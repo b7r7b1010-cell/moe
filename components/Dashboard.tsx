@@ -240,7 +240,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                  </div>
                  <div className="text-right">
                     <p className="text-[10px] opacity-80 leading-none">تواصل مباشر</p>
-                    <p className="text-lg">الدعم الفني والتقني</p>
+                    <p className="text-lg">الدعم الفني </p>
                  </div>
               </a>
            </div>
@@ -249,7 +249,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
               <div className="flex items-center gap-4 bg-white px-8 py-4 rounded-full shadow-xl border border-slate-100 group hover:shadow-2xl transition-all">
                  <Palette className="w-6 h-6 text-amber-500 group-hover:rotate-12 transition-transform" />
                  <div className="text-right">
-                   <p className="text-[10px] font-bold text-slate-400 leading-none mb-1 uppercase">إبداع وتطوير</p>
+                   <p className="text-[10px] font-bold text-slate-400 leading-none mb-1 uppercase">تصميم الاستاذ</p>
                    <p className="text-base font-black text-slate-700">
                      الأستاذ: <span className="text-[#0f4c4c] relative">عبدالله الشهري <span className="absolute bottom-0 left-0 w-full h-1 bg-[#00a18e]/20 -rotate-1"></span></span>
                    </p>
