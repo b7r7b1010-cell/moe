@@ -102,7 +102,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
         {/* المنصة الخارجية والتعليمات */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
-             <a href="dapper-sprinkles-8afd3c.netlify.app" target="_blank" rel="noreferrer" 
+             <a href="https://moe-swart.netlify.app/" target="_blank" rel="noreferrer" 
                 className="group h-full bg-[#00a18e] hover:bg-[#008f7e] rounded-[2.5rem] p-8 shadow-xl transition-all flex flex-col items-center justify-center text-center text-white border-4 border-white">
                 <div className="bg-white p-4 rounded-2xl mb-4 group-hover:rotate-12 transition-transform shadow-lg">
                    <LayoutDashboard className="w-8 h-8 text-[#00a18e]" />
