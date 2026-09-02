@@ -58,8 +58,8 @@ export const MobileInstallModal: React.FC<{ isOpen: boolean; onClose: () => void
         </button>
 
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-14 h-14 rounded-2xl bg-[#0f4c4c] flex items-center justify-center p-2 shadow-md border border-[#00a18e]">
-            <img src="/icon.svg" alt="إتقان" className="w-full h-full object-contain" />
+          <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-md border border-blue-400/30 flex-shrink-0">
+            <img src="/icon-512.png" alt="أيقونة إتقان" className="w-full h-full object-cover" />
           </div>
           <div>
             <h3 className="text-lg font-black text-slate-900">تثبيت تطبيق إتقان على الجوال</h3>
