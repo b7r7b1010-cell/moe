@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Profile, UserRole, Evaluation, SchoolTimeline, EvaluationPeriod, SchoolNotification } from '../types';
-import { DEFAULT_TIMELINE, buildWhatsAppMessage, CRITERIA_MAP } from '../constants';
+import { DEFAULT_TIMELINE, buildWhatsAppMessage, CRITERIA_MAP, getPeriodStatus } from '../constants';
 import * as XLSX from 'xlsx';
 import { 
   Search, LogOut, Printer, 
@@ -52,9 +52,63 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
 
     fetchData();
     fetchTimeline();
+
+    // Live Realtime listener on school_settings table
+    const channel = supabase
+      .channel('principal_school_settings_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'school_settings' }, (payload) => {
+        if (payload.new) {
+          const row: any = payload.new;
+          const mapped: SchoolTimeline = {
+            academicYear: row.academic_year || '1448هـ',
+            midtermStartDate: row.midterm_start_date || DEFAULT_TIMELINE.midtermStartDate,
+            midtermEndDate: row.midterm_end_date || DEFAULT_TIMELINE.midtermEndDate,
+            isMidtermOpen: row.is_midterm_open ?? true,
+            finalStartDate: row.final_start_date || DEFAULT_TIMELINE.finalStartDate,
+            finalEndDate: row.final_end_date || DEFAULT_TIMELINE.finalEndDate,
+            isFinalOpen: row.is_final_open ?? false,
+            activeAnnouncement: row.active_announcement || DEFAULT_TIMELINE.activeAnnouncement
+          };
+          setTimeline(mapped);
+          localStorage.setItem('school_timeline_1448', JSON.stringify(mapped));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  const fetchTimeline = () => {
+  const fetchTimeline = async () => {
+    try {
+      // 1. First try Supabase table school_settings
+      const { data, error } = await supabase
+        .from('school_settings')
+        .select('*')
+        .eq('id', 'current_timeline')
+        .maybeSingle();
+
+      if (data && !error) {
+        const mapped: SchoolTimeline = {
+          academicYear: data.academic_year || '1448هـ',
+          midtermStartDate: data.midterm_start_date || DEFAULT_TIMELINE.midtermStartDate,
+          midtermEndDate: data.midterm_end_date || DEFAULT_TIMELINE.midtermEndDate,
+          isMidtermOpen: data.is_midterm_open ?? true,
+          finalStartDate: data.final_start_date || DEFAULT_TIMELINE.finalStartDate,
+          finalEndDate: data.final_end_date || DEFAULT_TIMELINE.finalEndDate,
+          isFinalOpen: data.is_final_open ?? false,
+          activeAnnouncement: data.active_announcement || DEFAULT_TIMELINE.activeAnnouncement
+        };
+        setTimeline(mapped);
+        localStorage.setItem('school_timeline_1448', JSON.stringify(mapped));
+        return;
+      }
+    } catch (e) {
+      console.warn('Supabase timeline fetch fallback to localStorage', e);
+    }
+
+    // 2. Fallback to localStorage
     try {
       const stored = localStorage.getItem('school_timeline_1448');
       if (stored) {
@@ -74,7 +128,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
     }
   };
 
-  const saveTimeline = (newTimeline: SchoolTimeline) => {
+  const saveTimeline = async (newTimeline: SchoolTimeline) => {
     const updated = {
       ...newTimeline,
       academicYear: '1448هـ'
@@ -82,12 +136,32 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
     setTimeline(updated);
     localStorage.setItem('school_timeline_1448', JSON.stringify(updated));
     
+    // Save to Supabase school_settings
+    try {
+      await supabase
+        .from('school_settings')
+        .upsert({
+          id: 'current_timeline',
+          academic_year: updated.academicYear,
+          midterm_start_date: updated.midtermStartDate,
+          midterm_end_date: updated.midtermEndDate,
+          is_midterm_open: updated.isMidtermOpen,
+          final_start_date: updated.finalStartDate,
+          final_end_date: updated.finalEndDate,
+          is_final_open: updated.isFinalOpen,
+          active_announcement: updated.activeAnnouncement,
+          updated_at: new Date().toISOString()
+        });
+    } catch (e) {
+      console.warn('Failed to upsert to school_settings table in Supabase:', e);
+    }
+
     // Also save as an announcement notification
     if (updated.activeAnnouncement) {
       pushNotification('تعميم مدرسي للعام الدراسي 1448هـ', updated.activeAnnouncement, 'general', null);
     }
 
-    alert('✅ تم حفظ الجدول الزمني وتعميم العام الدراسي 1448هـ بنجاح');
+    alert('✅ تم حفظ ونشر الجدول الزمني وتعميم العام الدراسي 1448هـ بنجاح وتحديثه لجميع المعلمين.');
   };
 
   const pushNotification = async (title: string, message: string, type: 'general' | 'midterm' | 'final' | 'private', recipientId: string | null) => {
@@ -815,82 +889,106 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* فترة التقييم النصفي */}
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-black text-sm text-[#0f4c4c] flex items-center gap-2">
-                    <Clock className="w-4 h-4" /> 1. المراجعة نصف السنوية (التقييم النصفي)
-                  </span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="text-xs font-bold text-slate-600">{timeline.isMidtermOpen ? 'مفتوح' : 'مغلق'}</span>
-                    <input 
-                      type="checkbox" 
-                      checked={timeline.isMidtermOpen} 
-                      onChange={(e) => setTimeline({ ...timeline, isMidtermOpen: e.target.checked })}
-                      className="w-5 h-5 accent-[#0f4c4c]" 
-                    />
-                  </label>
-                </div>
+              {(() => {
+                const midStatus = getPeriodStatus(timeline.midtermStartDate, timeline.midtermEndDate, timeline.isMidtermOpen);
+                return (
+                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-sm text-[#0f4c4c] flex items-center gap-2">
+                        <Clock className="w-4 h-4" /> 1. المراجعة نصف السنوية (التقييم النصفي)
+                      </span>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-xs font-bold text-slate-600">{timeline.isMidtermOpen ? 'مفتوح' : 'مغلق'}</span>
+                        <input 
+                          type="checkbox" 
+                          checked={timeline.isMidtermOpen} 
+                          onChange={(e) => setTimeline({ ...timeline, isMidtermOpen: e.target.checked })}
+                          className="w-5 h-5 accent-[#0f4c4c]" 
+                        />
+                      </label>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ البدء:</label>
-                    <input 
-                      type="date" 
-                      value={timeline.midtermStartDate} 
-                      onChange={(e) => setTimeline({ ...timeline, midtermStartDate: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
-                    />
+                    <div className="flex items-center justify-between bg-white px-4 py-2.5 rounded-2xl border border-slate-200">
+                      <span className="text-[11px] font-bold text-slate-500">حالة الفترة لدى المعلمين:</span>
+                      <span className={`text-[11px] font-black px-3 py-1 rounded-xl border ${midStatus.badgeClass}`}>
+                        {midStatus.label}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ البدء:</label>
+                        <input 
+                          type="date" 
+                          value={timeline.midtermStartDate} 
+                          onChange={(e) => setTimeline({ ...timeline, midtermStartDate: e.target.value })}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ الانتهاء:</label>
+                        <input 
+                          type="date" 
+                          value={timeline.midtermEndDate} 
+                          onChange={(e) => setTimeline({ ...timeline, midtermEndDate: e.target.value })}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ الانتهاء:</label>
-                    <input 
-                      type="date" 
-                      value={timeline.midtermEndDate} 
-                      onChange={(e) => setTimeline({ ...timeline, midtermEndDate: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
-                    />
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* فترة التقييم النهائي */}
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-black text-sm text-[#00a18e] flex items-center gap-2">
-                    <Award className="w-4 h-4" /> 2. التقييم النهائي المعتمد (نهاية العام)
-                  </span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <span className="text-xs font-bold text-slate-600">{timeline.isFinalOpen ? 'مفتوح' : 'مغلق'}</span>
-                    <input 
-                      type="checkbox" 
-                      checked={timeline.isFinalOpen} 
-                      onChange={(e) => setTimeline({ ...timeline, isFinalOpen: e.target.checked })}
-                      className="w-5 h-5 accent-[#00a18e]" 
-                    />
-                  </label>
-                </div>
+              {(() => {
+                const finalStatus = getPeriodStatus(timeline.finalStartDate, timeline.finalEndDate, timeline.isFinalOpen);
+                return (
+                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-sm text-[#00a18e] flex items-center gap-2">
+                        <Award className="w-4 h-4" /> 2. التقييم النهائي المعتمد (نهاية العام)
+                      </span>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-xs font-bold text-slate-600">{timeline.isFinalOpen ? 'مفتوح' : 'مغلق'}</span>
+                        <input 
+                          type="checkbox" 
+                          checked={timeline.isFinalOpen} 
+                          onChange={(e) => setTimeline({ ...timeline, isFinalOpen: e.target.checked })}
+                          className="w-5 h-5 accent-[#00a18e]" 
+                        />
+                      </label>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ البدء:</label>
-                    <input 
-                      type="date" 
-                      value={timeline.finalStartDate} 
-                      onChange={(e) => setTimeline({ ...timeline, finalStartDate: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
-                    />
+                    <div className="flex items-center justify-between bg-white px-4 py-2.5 rounded-2xl border border-slate-200">
+                      <span className="text-[11px] font-bold text-slate-500">حالة الفترة لدى المعلمين:</span>
+                      <span className={`text-[11px] font-black px-3 py-1 rounded-xl border ${finalStatus.badgeClass}`}>
+                        {finalStatus.label}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ البدء:</label>
+                        <input 
+                          type="date" 
+                          value={timeline.finalStartDate} 
+                          onChange={(e) => setTimeline({ ...timeline, finalStartDate: e.target.value })}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ الانتهاء:</label>
+                        <input 
+                          type="date" 
+                          value={timeline.finalEndDate} 
+                          onChange={(e) => setTimeline({ ...timeline, finalEndDate: e.target.value })}
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">تاريخ الانتهاء:</label>
-                    <input 
-                      type="date" 
-                      value={timeline.finalEndDate} 
-                      onChange={(e) => setTimeline({ ...timeline, finalEndDate: e.target.value })}
-                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold" 
-                    />
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
             </div>
 
             {/* نص التعميم الموجه لبروفايل المعلمين */}

@@ -11,6 +11,110 @@ export const DEFAULT_TIMELINE: SchoolTimeline = {
   activeAnnouncement: 'نرحب بجميع الزملاء المعلمين في منصة إتقان لإدارة الأداء الوظيفي للعام الدراسي 1448هـ. نأمل رفع شواهد الأداء في المواعيد المحددة.',
 };
 
+export interface PeriodStatusResult {
+  status: 'closed_manual' | 'scheduled_future' | 'active' | 'ended';
+  label: string;
+  badgeText: string;
+  badgeClass: string;
+  dotClass: string;
+  isActionable: boolean;
+  daysRemaining: number | null;
+  daysUntilStart: number | null;
+}
+
+/**
+ * دالة حساب وتقييم حالة الفترة الزمنية بدقة هندسية وربط منطقي
+ */
+export function getPeriodStatus(
+  startDateStr?: string,
+  endDateStr?: string,
+  isOpenFlag: boolean = true
+): PeriodStatusResult {
+  // 1. إذا تم الإغلاق يدوياً من قبل مدير المدرسة
+  if (!isOpenFlag) {
+    return {
+      status: 'closed_manual',
+      label: 'مغلق بقرار الإدارة',
+      badgeText: 'مغلق',
+      badgeClass: 'bg-slate-200 text-slate-700 border-slate-300',
+      dotClass: 'bg-slate-400',
+      isActionable: false,
+      daysRemaining: null,
+      daysUntilStart: null
+    };
+  }
+
+  // في حال عدم توفر تواريخ
+  if (!startDateStr || !endDateStr) {
+    return {
+      status: 'scheduled_future',
+      label: 'مجدول لاحقاً',
+      badgeText: 'مجدول لاحقاً',
+      badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+      dotClass: 'bg-slate-300',
+      isActionable: false,
+      daysRemaining: null,
+      daysUntilStart: null
+    };
+  }
+
+  const now = new Date();
+  // تصفير الوقت للمقارنة بالتواريخ فقط
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const [sY, sM, sD] = startDateStr.split('-').map(Number);
+  const start = new Date(sY, sM - 1, sD);
+
+  const [eY, eM, eD] = endDateStr.split('-').map(Number);
+  const end = new Date(eY, eM - 1, eD, 23, 59, 59);
+
+  // 2. إذا كان تاريخ البدء في المستقبل (لم تبدأ الفترة بعد)
+  if (today < start) {
+    const diffMs = start.getTime() - today.getTime();
+    const daysUntilStart = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return {
+      status: 'scheduled_future',
+      label: `مجدول لاحقاً (يبدأ في ${startDateStr})`,
+      badgeText: `يبدأ بعد ${daysUntilStart} يوم`,
+      badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+      dotClass: 'bg-amber-400',
+      isActionable: false,
+      daysRemaining: null,
+      daysUntilStart
+    };
+  }
+
+  // 3. إذا كان التاريخ الحالي بعد تاريخ النهاية (انتهت المهلة)
+  if (now > end) {
+    return {
+      status: 'ended',
+      label: `انتهت فترة الرصد (${endDateStr})`,
+      badgeText: 'انتهت المهلة',
+      badgeClass: 'bg-rose-100 text-rose-800 border-rose-300',
+      dotClass: 'bg-rose-500',
+      isActionable: false,
+      daysRemaining: 0,
+      daysUntilStart: null
+    };
+  }
+
+  // 4. الفترة نشطة ومفتوحة حالياً
+  const diffEndMs = end.getTime() - now.getTime();
+  const daysRemaining = Math.max(1, Math.ceil(diffEndMs / (1000 * 60 * 60 * 24)));
+
+  return {
+    status: 'active',
+    label: `مفتوح للرفع والرصد (ينتهي في ${endDateStr})`,
+    badgeText: `متبقي ${daysRemaining} يوم`,
+    badgeClass: 'bg-emerald-600 text-white border-emerald-700 shadow-sm',
+    dotClass: 'bg-emerald-500 animate-pulse',
+    isActionable: true,
+    daysRemaining,
+    daysUntilStart: null
+  };
+}
+
+
 export const CRITERIA_MAP: Record<UserRole, Criterion[]> = {
   // 1. نموذج تقييم أداء المعلم (11 معياراً)
   [UserRole.TEACHER]: [

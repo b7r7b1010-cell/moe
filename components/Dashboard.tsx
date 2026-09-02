@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Profile, Evaluation, SchoolTimeline, UserRole, SchoolNotification } from '../types';
-import { CRITERIA_MAP, DEFAULT_TIMELINE } from '../constants';
+import { CRITERIA_MAP, DEFAULT_TIMELINE, getPeriodStatus } from '../constants';
 import { 
   LogOut, ExternalLink, 
   Link as LinkIcon, CheckCircle2, 
@@ -40,6 +40,35 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
     fetchEvaluations();
     fetchTimeline();
     fetchNotifications();
+
+    // Real-time synchronization for school_settings (timeline & announcements)
+    const channel = supabase
+      .channel('teacher_school_settings_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'school_settings' }, (payload) => {
+        if (payload.new) {
+          const row: any = payload.new;
+          const mapped: SchoolTimeline = {
+            academicYear: row.academic_year || '1448هـ',
+            midtermStartDate: row.midterm_start_date || DEFAULT_TIMELINE.midtermStartDate,
+            midtermEndDate: row.midterm_end_date || DEFAULT_TIMELINE.midtermEndDate,
+            isMidtermOpen: row.is_midterm_open ?? true,
+            finalStartDate: row.final_start_date || DEFAULT_TIMELINE.finalStartDate,
+            finalEndDate: row.final_end_date || DEFAULT_TIMELINE.finalEndDate,
+            isFinalOpen: row.is_final_open ?? false,
+            activeAnnouncement: row.active_announcement || DEFAULT_TIMELINE.activeAnnouncement
+          };
+          setTimeline(mapped);
+          localStorage.setItem('school_timeline_1448', JSON.stringify(mapped));
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
+        fetchNotifications();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleRefresh = async () => {
@@ -49,6 +78,34 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
   };
 
   const fetchTimeline = async () => {
+    try {
+      // 1. Try Supabase school_settings
+      const { data, error } = await supabase
+        .from('school_settings')
+        .select('*')
+        .eq('id', 'current_timeline')
+        .maybeSingle();
+
+      if (data && !error) {
+        const mapped: SchoolTimeline = {
+          academicYear: data.academic_year || '1448هـ',
+          midtermStartDate: data.midterm_start_date || DEFAULT_TIMELINE.midtermStartDate,
+          midtermEndDate: data.midterm_end_date || DEFAULT_TIMELINE.midtermEndDate,
+          isMidtermOpen: data.is_midterm_open ?? true,
+          finalStartDate: data.final_start_date || DEFAULT_TIMELINE.finalStartDate,
+          finalEndDate: data.final_end_date || DEFAULT_TIMELINE.finalEndDate,
+          isFinalOpen: data.is_final_open ?? false,
+          activeAnnouncement: data.active_announcement || DEFAULT_TIMELINE.activeAnnouncement
+        };
+        setTimeline(mapped);
+        localStorage.setItem('school_timeline_1448', JSON.stringify(mapped));
+        return;
+      }
+    } catch (e) {
+      console.warn('Supabase timeline fetch fallback', e);
+    }
+
+    // 2. Fallback to localStorage
     try {
       const stored = localStorage.getItem('school_timeline_1448');
       if (stored) {
@@ -60,8 +117,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
       } else {
         setTimeline({
           ...DEFAULT_TIMELINE,
-          academicYear: '1448هـ',
-          activeAnnouncement: 'نرحب بجميع الزملاء المعلمين في منصة إتقان لإدارة الأداء الوظيفي للعام الدراسي 1448هـ. نأمل رفع شواهد الأداء في المواعيد المحددة.'
+          academicYear: '1448هـ'
         });
       }
     } catch (e) {
@@ -201,16 +257,9 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
   const finalGrade = finalEval ? getGradeInfo(finalEval.total_score) : null;
   const lowCriteria = getLowScoreCriteria(midtermEval);
 
-  // حساب الأيام المتبقية
-  const getRemainingDays = (endDateStr: string) => {
-    if (!endDateStr) return null;
-    const end = new Date(endDateStr);
-    const now = new Date();
-    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return diff > 0 ? diff : 0;
-  };
-
-  const midtermRemaining = getRemainingDays(timeline.midtermEndDate);
+  // حساب دقيق لحالات الفترات الزمنية
+  const midtermStatus = getPeriodStatus(timeline.midtermStartDate, timeline.midtermEndDate, timeline.isMidtermOpen);
+  const finalStatus = getPeriodStatus(timeline.finalStartDate, timeline.finalEndDate, timeline.isFinalOpen);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-12 font-cairo text-right" dir="rtl">
@@ -280,46 +329,38 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
               </div>
             </div>
 
-            {/* بطاقات المواعيد السريعة */}
+            {/* بطاقات المواعيد السريعة مع المنطق التكاملي */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
               {/* موعد التقييم النصفي */}
-              <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
-                timeline.isMidtermOpen ? 'bg-emerald-50/80 border-emerald-300' : 'bg-slate-50 border-slate-200'
-              }`}>
+              <div className="p-3.5 rounded-2xl border flex items-center justify-between gap-3 bg-slate-50 border-slate-200">
                 <div className="flex items-center gap-2.5">
-                  <div className={`w-3 h-3 rounded-full ${timeline.isMidtermOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                  <div className={`w-3 h-3 rounded-full ${midtermStatus.dotClass}`} />
                   <div>
-                    <p className="text-[10px] font-black text-slate-500">فترة التقييم النصفي</p>
-                    <p className="text-xs font-black text-slate-800 font-mono">{timeline.midtermEndDate || 'محدد قريباً'}</p>
+                    <p className="text-[10px] font-black text-slate-500">1. المراجعة النصف سنوية</p>
+                    <p className="text-[11px] font-black text-slate-800 font-mono">
+                      {timeline.midtermStartDate} إلى {timeline.midtermEndDate}
+                    </p>
                   </div>
                 </div>
-                {timeline.isMidtermOpen && (
-                  <span className="bg-emerald-600 text-white text-[10px] px-2.5 py-1 rounded-xl font-black shadow-sm">
-                    {midtermRemaining !== null ? `متبقي ${midtermRemaining} يوم` : 'مفتوح للرفع'}
-                  </span>
-                )}
+                <span className={`text-[10px] px-2.5 py-1 rounded-xl font-black border ${midtermStatus.badgeClass}`}>
+                  {midtermStatus.badgeText}
+                </span>
               </div>
 
               {/* موعد التقييم النهائي */}
-              <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
-                timeline.isFinalOpen ? 'bg-blue-50/80 border-blue-300' : 'bg-slate-50 border-slate-200'
-              }`}>
+              <div className="p-3.5 rounded-2xl border flex items-center justify-between gap-3 bg-slate-50 border-slate-200">
                 <div className="flex items-center gap-2.5">
-                  <div className={`w-3 h-3 rounded-full ${timeline.isFinalOpen ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`} />
+                  <div className={`w-3 h-3 rounded-full ${finalStatus.dotClass}`} />
                   <div>
-                    <p className="text-[10px] font-black text-slate-500">فترة التقييم النهائي</p>
-                    <p className="text-xs font-black text-slate-800 font-mono">{timeline.finalEndDate || 'نهاية العام'}</p>
+                    <p className="text-[10px] font-black text-slate-500">2. التقييم النهائي المعتمد</p>
+                    <p className="text-[11px] font-black text-slate-800 font-mono">
+                      {timeline.finalStartDate} إلى {timeline.finalEndDate}
+                    </p>
                   </div>
                 </div>
-                {timeline.isFinalOpen ? (
-                  <span className="bg-blue-600 text-white text-[10px] px-2.5 py-1 rounded-xl font-black shadow-sm">
-                    مفتوح للرصد
-                  </span>
-                ) : (
-                  <span className="bg-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-lg font-bold">
-                    مجدول لاحقاً
-                  </span>
-                )}
+                <span className={`text-[10px] px-2.5 py-1 rounded-xl font-black border ${finalStatus.badgeClass}`}>
+                  {finalStatus.badgeText}
+                </span>
               </div>
             </div>
           </div>
@@ -482,7 +523,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
 
             {/* قسم إدخال رابط شواهد التقييم النصفي */}
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-200">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-[#0f4c4c]/10 text-[#0f4c4c] rounded-2xl">
                     <FolderCheck className="w-6 h-6" />
@@ -495,9 +536,23 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                 {midtermEval ? (
                   <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl text-xs font-black">تمت المراجعة</span>
                 ) : (
-                  <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-xl text-xs font-black">متاح للتعديل</span>
+                  <span className={`px-3 py-1 rounded-xl text-xs font-black border ${midtermStatus.badgeClass}`}>
+                    {midtermStatus.badgeText}
+                  </span>
                 )}
               </div>
+
+              {/* تنبيه حالة الفترة */}
+              {!midtermEval && !midtermStatus.isActionable && (
+                <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-3 text-xs font-bold">
+                  <Info className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                  <span>
+                    {midtermStatus.status === 'scheduled_future' && `📌 فترة الرفع النصف سنوية مجدولة لتبدأ في ${timeline.midtermStartDate} (بعد ${midtermStatus.daysUntilStart} يوم). يمكنك حفظ الرابط مسبقاً وسيكون متاحاً لإشعار الإدارة فور بدء الفترة.`}
+                    {midtermStatus.status === 'ended' && `⚠️ انتهت الفترة المحددة لرفع شواهد التقييم النصفي (${timeline.midtermEndDate}).`}
+                    {midtermStatus.status === 'closed_manual' && `🔒 فترة الرفع النصف سنوية مغلقة حالياً بقرار من إدارة المدرسة.`}
+                  </span>
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div className="relative">
@@ -542,10 +597,12 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                     </div>
                     <button
                       onClick={() => handleNotifyReady(false)}
-                      disabled={saving || isReadyMidterm}
+                      disabled={saving || isReadyMidterm || !midtermStatus.isActionable}
                       className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 ${
                         isReadyMidterm
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default'
+                          : !midtermStatus.isActionable
+                          ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                           : 'bg-[#00a18e] hover:bg-[#008f7e] text-white'
                       }`}
                     >
@@ -610,7 +667,11 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                 <div>
                   <h4 className="text-sm font-black mb-1">مرحلة التقييم النهائي الختامي (1448هـ)</h4>
                   <p className="text-xs leading-relaxed font-medium">
-                    يتم فتح هذه المرحلة في نهاية العام الدراسي لاعتماد الدرجة النهائية، يرجى رفع مجلد الشواهد النهائي بعد استكمال كافة المتطلبات التدريسية والتكليفات.
+                    {finalStatus.status === 'scheduled_future' 
+                      ? `فترة التقييم النهائي مجدولة لتبدأ في ${timeline.finalStartDate} (بعد ${finalStatus.daysUntilStart} يوم). يمكنك حفظ رابط الشواهد الختامية وتحديثه في أي وقت.`
+                      : finalStatus.status === 'active'
+                      ? `فترة التقييم النهائي مفتوحة حالياً وحتى ${timeline.finalEndDate}. يرجى رفع الشواهد وإشعار الإدارة.`
+                      : `مرحلة الاعتماد النهائي تخضع للإطار الزمني المحدد من إدارة المدرسة.`}
                   </p>
                 </div>
               </div>
@@ -618,14 +679,23 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
 
             {/* إدخال رابط الشواهد النهائي */}
             <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-slate-200">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-emerald-500/10 text-emerald-700 rounded-2xl">
-                  <Sparkles className="w-6 h-6" />
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-emerald-500/10 text-emerald-700 rounded-2xl">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base md:text-lg font-black text-slate-800">رابط مجلد الشواهد النهائي (المحدث)</h3>
+                    <p className="text-xs text-slate-500 font-bold">رابط المجلد الختامي شامل كافة شواهد ومخرجات العام الدراسي 1448هـ</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base md:text-lg font-black text-slate-800">رابط مجلد الشواهد النهائي (المحدث)</h3>
-                  <p className="text-xs text-slate-500 font-bold">رابط المجلد الختامي شامل كافة شواهد ومخرجات العام الدراسي 1448هـ</p>
-                </div>
+                {finalEval ? (
+                  <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-xl text-xs font-black">معتمد نهائياً</span>
+                ) : (
+                  <span className={`px-3 py-1 rounded-xl text-xs font-black border ${finalStatus.badgeClass}`}>
+                    {finalStatus.badgeText}
+                  </span>
+                )}
               </div>
 
               <div className="space-y-4">
@@ -670,10 +740,12 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                     </div>
                     <button
                       onClick={() => handleNotifyReady(true)}
-                      disabled={saving || isReadyFinal}
+                      disabled={saving || isReadyFinal || !finalStatus.isActionable}
                       className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 ${
                         isReadyFinal
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default'
+                          : !finalStatus.isActionable
+                          ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
                           : 'bg-[#0f4c4c] hover:bg-black text-white'
                       }`}
                     >
