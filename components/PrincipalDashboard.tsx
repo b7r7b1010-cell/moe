@@ -12,10 +12,11 @@ import {
   UserCog, Save, Edit3, Calendar, Clock, Award, Send,
   Filter, CheckCircle2, ChevronRight, Phone, BookOpen, Trash2,
   Bell, Megaphone, RefreshCw, FileSpreadsheet, Download,
-  ExternalLink, Share2, Copy
+  ExternalLink, Share2, Copy, Smartphone
 } from 'lucide-react';
 import EvaluationModal from './EvaluationModal';
 import PrintableReport from './PrintableReport';
+import { MobileInstallModal } from './MobileInstallModal';
 
 const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
   const [staff, setStaff] = useState<Profile[]>([]);
@@ -25,6 +26,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
     academicYear: '1448هـ'
   });
   const [loading, setLoading] = useState(true);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [view, setView] = useState<'active' | 'pending' | 'timeline' | 'notifications'>('active');
@@ -536,9 +538,17 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
                 <p className="text-[10px] opacity-70 font-bold text-emerald-400">مدير المدرسة المسؤول،</p>
                 <p className="text-sm font-black">{userProfile.full_name}</p>
               </div>
-              <button onClick={onLogout} className="text-red-300 hover:text-red-100 text-xs font-bold flex items-center gap-1.5 transition-colors group mt-1">
-                <LogOut className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" /> تسجيل الخروج
-              </button>
+              <div className="flex items-center gap-2 mt-1">
+                <button 
+                  onClick={() => setShowInstallModal(true)}
+                  className="bg-white/20 hover:bg-white/30 text-white text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-white/20 shadow-sm transition-all"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-[#fcd34d]" /> تثبيت كتطبيق بالجوال
+                </button>
+                <button onClick={onLogout} className="text-red-300 hover:text-red-100 text-xs font-bold flex items-center gap-1.5 transition-colors group">
+                  <LogOut className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" /> تسجيل الخروج
+                </button>
+              </div>
            </div>
         </div>
       </header>
@@ -1387,6 +1397,9 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
           principalName={userProfile.full_name} 
         />
       )}
+
+      {/* مودال شرح وتثبيت التطبيق على الجوال */}
+      <MobileInstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
     </div>
   );
 };

@@ -10,13 +10,15 @@ import {
   Heart, Palette, PhoneCall, Calendar,
   Clock, AlertCircle, Award, Target, BookOpen, ChevronDown, ChevronUp,
   FolderCheck, Bell, Megaphone, Check, MessageCircle,
-  RefreshCw
+  RefreshCw, Smartphone
 } from 'lucide-react';
+import { MobileInstallModal } from './MobileInstallModal';
 
 const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
   const [driveLink, setDriveLink] = useState(userProfile.drive_link || '');
   const [driveLinkV2, setDriveLinkV2] = useState(userProfile.drive_link_v2 || '');
   const [saving, setSaving] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   const [midtermEval, setMidtermEval] = useState<Evaluation | null>(null);
   const [finalEval, setFinalEval] = useState<Evaluation | null>(null);
   const [timeline, setTimeline] = useState<SchoolTimeline>({
@@ -291,7 +293,13 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 mt-1">
+              <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 mt-1">
+                <button 
+                  onClick={() => setShowInstallModal(true)}
+                  className="bg-white/20 hover:bg-white/30 text-white text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-white/20 shadow-sm transition-all"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-[#fcd34d]" /> تثبيت كتطبيق بالجوال
+                </button>
                 <button 
                   onClick={handleRefresh} 
                   disabled={refreshing}
@@ -921,6 +929,9 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
         </footer>
 
       </main>
+
+      {/* مودال شرح وتثبيت التطبيق على الجوال */}
+      <MobileInstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
     </div>
   );
 };

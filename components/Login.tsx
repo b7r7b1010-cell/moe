@@ -5,8 +5,9 @@ import {
   KeyRound, Phone, UserPlus, LogIn, 
   RefreshCw, User, Briefcase, GraduationCap, 
   ShieldCheck, Users, Beaker, ClipboardCheck, AlertTriangle,
-  HeartPulse, Sparkles, BookOpen
+  HeartPulse, Sparkles, BookOpen, Smartphone
 } from 'lucide-react';
+import { MobileInstallModal } from './MobileInstallModal';
 
 const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [mobile, setMobile] = useState('');
@@ -16,6 +17,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [role, setRole] = useState<UserRole>(UserRole.TEACHER);
   const [isRegistering, setIsRegistering] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   const rolesConfig = [
@@ -255,8 +257,21 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           >
             {isRegistering ? 'لديك حساب بالفعل؟ سجل دخولك الآن' : 'معلم جديد بالمدرسة؟ سجل بياناتك وانضم للنظام'}
           </button>
+
+          <div className="mt-6 pt-4 border-t border-slate-100 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowInstallModal(true)}
+              className="text-slate-500 hover:text-[#0f4c4c] text-xs font-bold flex items-center gap-1.5 transition"
+            >
+              <Smartphone className="w-4 h-4 text-[#00a18e]" />
+              تثبيت التطبيق على الشاشة الرئيسية للجوال
+            </button>
+          </div>
         </div>
       </div>
+
+      <MobileInstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
     </div>
   );
 };
