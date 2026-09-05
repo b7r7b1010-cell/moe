@@ -10,9 +10,10 @@ import {
   Heart, Palette, PhoneCall, Calendar,
   Clock, AlertCircle, Award, Target, BookOpen, ChevronDown, ChevronUp,
   FolderCheck, Bell, Megaphone, Check, MessageCircle,
-  RefreshCw, Smartphone
+  RefreshCw, Smartphone, ClipboardList
 } from 'lucide-react';
 import { MobileInstallModal } from './MobileInstallModal';
+import { TeacherTasksView } from './TeacherTasksView';
 
 const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
   const [driveLink, setDriveLink] = useState(userProfile.drive_link || '');
@@ -28,7 +29,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
   const [notifications, setNotifications] = useState<SchoolNotification[]>([]);
   const [isReadyMidterm, setIsReadyMidterm] = useState(userProfile.is_ready_for_eval || false);
   const [isReadyFinal, setIsReadyFinal] = useState(userProfile.is_ready_for_final || false);
-  const [activeTab, setActiveTab] = useState<'midterm' | 'final' | 'notifications' | 'criteria'>('midterm');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'midterm' | 'final' | 'notifications' | 'criteria'>('tasks');
   const [expandedCriterion, setExpandedCriterion] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -398,9 +399,22 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
         </div>
 
         {/* ========================================================================= */}
-        {/* التبويبات الأربعة الرئيسية (متجاوبة تماماً مع الجوال واللابتوب) */}
+        {/* التبويبات الرئيسية (متجاوبة تماماً مع الجوال واللابتوب) */}
         {/* ========================================================================= */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 border-b border-slate-200 pb-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 border-b border-slate-200 pb-2">
+          {/* التبويب 0: المهام والمحطات المجدولة */}
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={`py-3.5 px-3 md:px-4 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 transition-all col-span-2 sm:col-span-1 ${
+              activeTab === 'tasks'
+                ? 'bg-[#0f4c4c] text-white shadow-lg ring-2 ring-emerald-400/30'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+            <span>المهام والمحطات المجدولة</span>
+          </button>
+
           {/* التبويب 1: التقييم النصفي */}
           <button
             onClick={() => setActiveTab('midterm')}
@@ -439,7 +453,7 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
             }`}
           >
             <Bell className="w-4 h-4 flex-shrink-0" />
-            <span>الإشعارات والرسائل</span>
+            <span>الإشعارات</span>
             {notifications.length > 0 && (
               <span className="bg-amber-400 text-slate-900 text-[9px] px-2 py-0.5 rounded-full font-black">
                 {notifications.length}
@@ -457,9 +471,14 @@ const Dashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ u
             }`}
           >
             <BookOpen className="w-4 h-4 flex-shrink-0" />
-            <span className="truncate">معايير {userProfile.role}</span>
+            <span className="truncate">المعايير</span>
           </button>
         </div>
+
+        {/* ======================= التبويب: المهام والمحطات المجدولة ======================= */}
+        {activeTab === 'tasks' && (
+          <TeacherTasksView userProfile={userProfile} />
+        )}
 
         {/* ======================= التبويب الأول: التقييم النصف سنوي ======================= */}
         {activeTab === 'midterm' && (

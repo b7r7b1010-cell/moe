@@ -60,3 +60,28 @@ export interface SchoolTimeline {
   activeAnnouncement: string;
   academicYear: string;
 }
+
+export interface SchoolTask {
+  id: string;
+  title: string;
+  description?: string;
+  due_date?: string;
+  academic_year: string;
+  is_active: boolean;
+  target_role?: string; // 'الكل' أو مسمى وظيفي معين
+  created_at: string;
+}
+
+export type SubmissionStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
+
+export interface TaskSubmission {
+  id: string;
+  task_id: string;
+  teacher_id: string;
+  drive_link: string;
+  teacher_notes?: string;
+  status: SubmissionStatus;
+  principal_feedback?: string;
+  submitted_at: string;
+  updated_at?: string;
+}

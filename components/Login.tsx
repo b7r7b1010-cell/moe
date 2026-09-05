@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, testSupabaseConnection } from '../supabase';
+import { supabase, testSupabaseConnection, safeSignOut } from '../supabase';
 import { UserRole } from '../types';
 import { 
   KeyRound, Phone, UserPlus, LogIn, 
@@ -70,7 +70,15 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         
         const { data: authData, error: authError } = await supabase.auth.signUp({ 
           email: internalEmail, 
-          password 
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
+              mobile: cleanMobile,
+              role: role,
+              subject: subject.trim() || ''
+            }
+          }
         });
         
         if (authError) {
@@ -82,14 +90,19 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         
         if (authData.user) {
           const autoApprove = role === UserRole.PRINCIPAL;
-          await supabase.from('profiles').upsert({ 
+          const { error: profileError } = await supabase.from('profiles').upsert({ 
             id: authData.user.id, 
             full_name: fullName.trim(), 
             mobile: cleanMobile,
             role: role,
-            subject: subject.trim() || undefined,
+            subject: subject.trim() || '',
             is_approved: autoApprove 
           });
+
+          if (profileError) {
+            console.error('Error inserting profile:', profileError);
+            throw new Error(`تم إنشاء الحساب الأمني ولكن تعذر حفظ الملف الشخصي: ${profileError.message}`);
+          }
           
           alert(autoApprove ? 'تم إنشاء الحساب بنجاح.' : 'تم تسجيل طلبك بنجاح! يرجى الانتظار حتى يقوم مدير المدرسة باعتماد الحساب.');
           setIsRegistering(false);
@@ -103,6 +116,10 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         if (signInError) {
           if (signInError.message.includes('Invalid login credentials')) {
             throw new Error('بيانات الدخول غير صحيحة. يرجى التحقق من رقم الجوال وكلمة المرور.');
+          }
+          if (signInError.message.includes('Refresh Token') || signInError.message.includes('refresh_token')) {
+            await safeSignOut();
+            throw new Error('انتهت صلاحية الجلسة السابقة. يرجى إعادة إدخال كلمة المرور.');
           }
           throw signInError;
         }

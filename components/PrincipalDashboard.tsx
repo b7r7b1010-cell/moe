@@ -12,11 +12,12 @@ import {
   UserCog, Save, Edit3, Calendar, Clock, Award, Send,
   Filter, CheckCircle2, ChevronRight, Phone, BookOpen, Trash2,
   Bell, Megaphone, RefreshCw, FileSpreadsheet, Download,
-  ExternalLink, Share2, Copy, Smartphone
+  ExternalLink, Share2, Copy, Smartphone, ClipboardList
 } from 'lucide-react';
 import EvaluationModal from './EvaluationModal';
 import PrintableReport from './PrintableReport';
 import { MobileInstallModal } from './MobileInstallModal';
+import { TaskSubmissionsManager } from './TaskSubmissionsManager';
 
 const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
   const [staff, setStaff] = useState<Profile[]>([]);
@@ -29,7 +30,7 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [view, setView] = useState<'active' | 'pending' | 'timeline' | 'notifications'>('active');
+  const [view, setView] = useState<'active' | 'pending' | 'timeline' | 'notifications' | 'tasks'>('active');
   const [filterType, setFilterType] = useState<'all' | 'evaluated_midterm' | 'evaluated_final' | 'pending_eval' | 'no_file'>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   
@@ -623,6 +624,16 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
               </button>
 
               <button 
+                onClick={() => setView('tasks')} 
+                className={`px-4 md:px-6 py-3.5 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${
+                  view === 'tasks' ? 'bg-[#0f4c4c] text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                }`}
+              >
+                <ClipboardList className="w-4 h-4" />
+                المهام والمحطات المجدولة
+              </button>
+
+              <button 
                 onClick={() => setView('notifications')} 
                 className={`px-4 md:px-6 py-3.5 rounded-2xl font-black text-xs md:text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${
                   view === 'notifications' ? 'bg-purple-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
@@ -1026,8 +1037,13 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
           </div>
         )}
 
+        {/* ======================= عرض المهام والمحطات المجدولة ======================= */}
+        {view === 'tasks' && (
+          <TaskSubmissionsManager staff={staff} principalProfile={userProfile} />
+        )}
+
         {/* ======================= عرض قائمة المعلمين ======================= */}
-        {view !== 'timeline' && view !== 'notifications' && (
+        {view !== 'timeline' && view !== 'notifications' && view !== 'tasks' && (
           <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden min-h-[450px]">
             {loading ? (
               <div className="flex flex-col items-center justify-center py-40 gap-4">
