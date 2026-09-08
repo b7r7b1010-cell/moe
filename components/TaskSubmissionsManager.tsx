@@ -76,13 +76,19 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch tasks
-      const { data: tasksData, error: tasksError } = await supabase
-        .from('tasks')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      let loadedTasks = (!tasksError && tasksData) ? tasksData : [];
+      // 1. Fetch tasks with timeout
+      let loadedTasks: SchoolTask[] = [];
+      try {
+        const { data: tasksData, error: tasksError } = await withTimeout(
+          supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+          3500
+        );
+        if (!tasksError && tasksData && tasksData.length > 0) {
+          loadedTasks = tasksData;
+        }
+      } catch (err) {
+        console.warn('Tasks remote fetch timeout/error, trying local fallback:', err);
+      }
 
       if (loadedTasks.length === 0) {
         const localTasks = localStorage.getItem('local_school_tasks_1448');
@@ -97,7 +103,7 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
         loadedTasks = INITIAL_SCHOOL_TASKS;
         localStorage.setItem('local_school_tasks_1448', JSON.stringify(INITIAL_SCHOOL_TASKS));
         try {
-          await supabase.from('tasks').upsert(INITIAL_SCHOOL_TASKS);
+          withTimeout(supabase.from('tasks').upsert(INITIAL_SCHOOL_TASKS), 2500).catch(() => {});
         } catch (e) {}
       }
 
@@ -106,17 +112,28 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
         setSelectedTaskId(loadedTasks[0].id);
       }
 
-      // 2. Fetch submissions
-      const { data: subsData, error: subsError } = await supabase
-        .from('task_submissions')
-        .select('*');
+      // 2. Fetch submissions with timeout
+      try {
+        const { data: subsData, error: subsError } = await withTimeout(
+          supabase.from('task_submissions').select('*'),
+          3500
+        );
 
-      if (!subsError && subsData) {
-        setSubmissions(subsData);
-      } else {
+        if (!subsError && subsData) {
+          setSubmissions(subsData);
+          try {
+            localStorage.setItem('local_school_submissions_1448', JSON.stringify(subsData));
+          } catch {}
+        } else {
+          const localSubs = localStorage.getItem('local_school_submissions_1448');
+          if (localSubs) {
+            setSubmissions(JSON.parse(localSubs));
+          }
+        }
+      } catch (err) {
         const localSubs = localStorage.getItem('local_school_submissions_1448');
         if (localSubs) {
-          setSubmissions(JSON.parse(localSubs));
+          try { setSubmissions(JSON.parse(localSubs)); } catch {}
         }
       }
     } catch (e) {
@@ -313,8 +330,18 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId);
 
+  // Resilient staff list: fallback to local_school_staff_1448 if staff prop is empty
+  const activeStaffList: Profile[] = (staff && staff.length > 0) ? staff : (() => {
+    try {
+      const cached = localStorage.getItem('local_school_staff_1448');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  })();
+
   // Target staff for the selected task (comprehensively covers all 3 teacher roles)
-  const targetStaff = staff.filter(s => isStaffTargetedByTask(s, selectedTask));
+  const targetStaff = activeStaffList.filter(s => isStaffTargetedByTask(s, selectedTask));
 
   // Extract list of subjects present in target staff for the filter dropdown
   const availableSubjects = Array.from(
@@ -324,7 +351,7 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
   // Calculate task statistics
   const getTaskStats = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
-    const assignedStaff = staff.filter(s => isStaffTargetedByTask(s, task));
+    const assignedStaff = activeStaffList.filter(s => isStaffTargetedByTask(s, task));
 
     const taskSubs = submissions.filter(s => s.task_id === taskId);
     const submittedCount = taskSubs.filter(s => s.drive_link && s.status !== 'pending').length;

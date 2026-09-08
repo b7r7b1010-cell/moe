@@ -37,8 +37,17 @@ export const PrintableTaskReport: React.FC<Props> = ({
     day: 'numeric',
   });
 
-  // Calculate items safely if staffList was passed
-  const reportItems = directItems || staffList.map(teacher => {
+  // Calculate items safely with robust fallback to cached staff list
+  const effectiveStaff = (staffList && staffList.length > 0) ? staffList : (() => {
+    try {
+      const cached = localStorage.getItem('local_school_staff_1448');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const reportItems = directItems || effectiveStaff.map(teacher => {
     const sub = submissions.find(s => s.task_id === task.id && s.teacher_id === teacher.id);
     return { teacher, submission: sub };
   });
@@ -56,11 +65,18 @@ export const PrintableTaskReport: React.FC<Props> = ({
   const effectivePrincipalName = principalProfile?.full_name || propPrincipalName || 'أ. عبدالله علي الشهري';
 
   const handlePrint = () => {
-    window.print();
+    document.body.classList.add('is-printing-report');
+    window.focus();
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('is-printing-report');
+      }, 1000);
+    }, 150);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-cairo text-right print:static print:bg-white print:p-0 print:overflow-visible print:block printable-modal-overlay" dir="rtl">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-cairo text-right print:fixed print:inset-0 print:bg-white print:p-0 print:overflow-visible print:block print:z-[999999] print:backdrop-blur-none printable-modal-overlay" dir="rtl">
       {/* Floating Action Bar (Hidden on Print) */}
       <div className="fixed top-4 left-4 right-4 z-50 flex justify-between items-center bg-white/95 backdrop-blur-md px-6 py-3 rounded-2xl shadow-xl border border-slate-200 print:hidden max-w-5xl mx-auto no-print">
         <div className="flex items-center gap-3">
@@ -72,14 +88,14 @@ export const PrintableTaskReport: React.FC<Props> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handlePrint}
-            className="bg-[#0f4c4c] hover:bg-[#164e63] text-white px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-md transition-all active:scale-95"
+            className="bg-[#0f4c4c] hover:bg-[#164e63] text-white px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 shadow-md transition-all active:scale-95 cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             طباعة الكشف الآن
           </button>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors"
+            className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors cursor-pointer"
             title="إغلاق"
           >
             <X className="w-5 h-5" />
@@ -88,7 +104,7 @@ export const PrintableTaskReport: React.FC<Props> = ({
       </div>
 
       {/* The Printable Page Canvas */}
-      <div className="printable-area bg-white w-full max-w-5xl min-h-[90vh] my-16 print:my-0 p-8 md:p-12 rounded-3xl shadow-2xl print:shadow-none print:rounded-none print:w-full print:p-2 text-slate-900 border print:border-none border-slate-200">
+      <div className="printable-area bg-white w-full max-w-5xl min-h-[90vh] my-16 print:my-0 p-8 md:p-12 rounded-3xl shadow-2xl print:shadow-none print:rounded-none print:w-full print:max-w-none print:min-h-0 print:p-4 text-slate-900 border print:border-none border-slate-200">
         {/* Official Header */}
         <div className="flex justify-between items-start border-b-2 border-slate-800 pb-5 mb-6">
           <div className="text-right space-y-1 text-xs md:text-sm font-black text-slate-800">

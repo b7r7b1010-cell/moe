@@ -18,15 +18,37 @@ import EvaluationModal from './EvaluationModal';
 import PrintableReport from './PrintableReport';
 import { MobileInstallModal } from './MobileInstallModal';
 import { TaskSubmissionsManager } from './TaskSubmissionsManager';
+import { withTimeout } from '../lib/taskHelpers';
 
 const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void }> = ({ userProfile, onLogout }) => {
-  const [staff, setStaff] = useState<Profile[]>([]);
-  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [staff, setStaff] = useState<Profile[]>(() => {
+    try {
+      const cached = localStorage.getItem('local_school_staff_1448');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [evaluations, setEvaluations] = useState<Evaluation[]>(() => {
+    try {
+      const cached = localStorage.getItem('local_school_evaluations_1448');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [timeline, setTimeline] = useState<SchoolTimeline>({
     ...DEFAULT_TIMELINE,
     academicYear: '1448هـ'
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem('local_school_staff_1448');
+      return !cached || JSON.parse(cached).length === 0;
+    } catch {
+      return true;
+    }
+  });
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -345,23 +367,61 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
   };
 
   const fetchData = async () => {
-    setLoading(true);
+    const hasLocal = staff.length > 0;
+    if (!hasLocal) {
+      setLoading(true);
+    }
     try {
-      const { data: staffData } = await supabase
+      const staffQuery = supabase
         .from('profiles')
         .select('*')
         .neq('role', UserRole.PRINCIPAL)
         .order('created_at', { ascending: false });
-      
-      const { data: evalData } = await supabase
+
+      const evalQuery = supabase
         .from('evaluations')
         .select('*')
         .order('created_at', { ascending: false });
-      
-      if (staffData) setStaff(staffData);
-      if (evalData) setEvaluations(evalData);
+
+      // Apply timeout so page never freezes on refresh
+      const [staffRes, evalRes] = await Promise.allSettled([
+        withTimeout(staffQuery, 4000),
+        withTimeout(evalQuery, 4000)
+      ]);
+
+      if (staffRes.status === 'fulfilled' && staffRes.value.data) {
+        const staffData = staffRes.value.data;
+        setStaff(staffData);
+        try {
+          localStorage.setItem('local_school_staff_1448', JSON.stringify(staffData));
+        } catch {}
+      } else if (!hasLocal) {
+        const cached = localStorage.getItem('local_school_staff_1448');
+        if (cached) {
+          try { setStaff(JSON.parse(cached)); } catch {}
+        }
+      }
+
+      if (evalRes.status === 'fulfilled' && evalRes.value.data) {
+        const evalData = evalRes.value.data;
+        setEvaluations(evalData);
+        try {
+          localStorage.setItem('local_school_evaluations_1448', JSON.stringify(evalData));
+        } catch {}
+      } else if (evaluations.length === 0) {
+        const cached = localStorage.getItem('local_school_evaluations_1448');
+        if (cached) {
+          try { setEvaluations(JSON.parse(cached)); } catch {}
+        }
+      }
     } catch (e) { 
-      console.error(e); 
+      console.warn('fetchData fallback notice:', e);
+      if (staff.length === 0) {
+        try {
+          const cached = localStorage.getItem('local_school_staff_1448');
+          if (cached) setStaff(JSON.parse(cached));
+        } catch {}
+      }
     } finally { 
       setLoading(false); 
     }
@@ -373,7 +433,11 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
     try {
       const { error } = await supabase.from('profiles').update({ is_approved: true }).eq('id', id);
       if (!error) {
-        setStaff(prev => prev.map(s => s.id === id ? { ...s, is_approved: true } : s));
+        setStaff(prev => {
+          const updated = prev.map(s => s.id === id ? { ...s, is_approved: true } : s);
+          try { localStorage.setItem('local_school_staff_1448', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
         alert('✅ تم اعتماد حساب المعلم بنجاح! يمكنه الآن استخدام كافة خصائص المنظومة.');
       } else {
         alert('حدث خطأ أثناء اعتماد الحساب في قاعدة البيانات: ' + error.message);
@@ -392,7 +456,11 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
       await supabase.from('evaluations').delete().eq('staff_id', id);
       const { error } = await supabase.from('profiles').delete().eq('id', id);
       if (!error) {
-        setStaff(prev => prev.filter(s => s.id !== id));
+        setStaff(prev => {
+          const updated = prev.filter(s => s.id !== id);
+          try { localStorage.setItem('local_school_staff_1448', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
         alert('تم حذف المعلم بنجاح.');
       } else {
         alert('حدث خطأ أثناء الحذف: ' + error.message);
@@ -421,7 +489,11 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
       .eq('id', editingStaff.id);
 
     if (!error) {
-      setStaff(prev => prev.map(s => s.id === editingStaff.id ? editingStaff : s));
+      setStaff(prev => {
+        const updated = prev.map(s => s.id === editingStaff.id ? editingStaff : s);
+        try { localStorage.setItem('local_school_staff_1448', JSON.stringify(updated)); } catch {}
+        return updated;
+      });
       setEditingStaff(null);
       alert('✅ تم تحديث بيانات المعلم وتكليفه بنجاح!');
     } else {
@@ -548,6 +620,15 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
                 <p className="text-sm font-black">{userProfile.full_name}</p>
               </div>
               <div className="flex items-center gap-2 mt-1">
+                <button 
+                  onClick={fetchData}
+                  disabled={loading}
+                  className="bg-white/10 hover:bg-white/20 text-white text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-white/20 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                  title="تحديث واسترجاع البيانات من السحابة فوراً"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-emerald-300' : 'text-emerald-300'}`} /> 
+                  <span>{loading ? 'جاري التحديث...' : 'تحديث البيانات'}</span>
+                </button>
                 <button 
                   onClick={() => setShowInstallModal(true)}
                   className="bg-white/20 hover:bg-white/30 text-white text-xs font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 border border-white/20 shadow-sm transition-all"
