@@ -370,11 +370,19 @@ const PrincipalDashboard: React.FC<{ userProfile: Profile, onLogout: () => void 
   const approveUser = async (id: string) => {
     if (!confirm('هل أنت متأكد من اعتماد حساب هذا المعلم؟')) return;
     setProcessingId(id);
-    const { error } = await supabase.from('profiles').update({ is_approved: true }).eq('id', id);
-    if (!error) {
-      setStaff(prev => prev.map(s => s.id === id ? { ...s, is_approved: true } : s));
+    try {
+      const { error } = await supabase.from('profiles').update({ is_approved: true }).eq('id', id);
+      if (!error) {
+        setStaff(prev => prev.map(s => s.id === id ? { ...s, is_approved: true } : s));
+        alert('✅ تم اعتماد حساب المعلم بنجاح! يمكنه الآن استخدام كافة خصائص المنظومة.');
+      } else {
+        alert('حدث خطأ أثناء اعتماد الحساب في قاعدة البيانات: ' + error.message);
+      }
+    } catch (e: any) {
+      alert('خطأ في الاتصال: ' + e.message);
+    } finally {
+      setProcessingId(null);
     }
-    setProcessingId(null);
   };
 
   const deleteUser = async (id: string, name: string) => {

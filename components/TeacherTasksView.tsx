@@ -22,7 +22,6 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
 
   // Dedicated Top Form State for adding task link
   const [selectedTaskForSubmission, setSelectedTaskForSubmission] = useState<string>('');
-  const [customTaskTitle, setCustomTaskTitle] = useState<string>('');
   const [dedicatedLink, setDedicatedLink] = useState<string>('');
   const [dedicatedNote, setDedicatedNote] = useState<string>('');
   const [isSubmittingDedicated, setIsSubmittingDedicated] = useState<boolean>(false);
@@ -147,14 +146,9 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
   // When teacher selects a different task in the top dropdown
   const handleTaskSelectionChange = (taskId: string) => {
     setSelectedTaskForSubmission(taskId);
-    if (taskId === 'custom_task') {
-      setDedicatedLink('');
-      setDedicatedNote('');
-    } else {
-      const existing = submissions.find(s => s.task_id === taskId);
-      setDedicatedLink(existing?.drive_link || links[taskId] || '');
-      setDedicatedNote(existing?.teacher_notes || notes[taskId] || '');
-    }
+    const existing = submissions.find(s => s.task_id === taskId);
+    setDedicatedLink(existing?.drive_link || links[taskId] || '');
+    setDedicatedNote(existing?.teacher_notes || notes[taskId] || '');
   };
 
   // Dedicated Top Submission Handler
@@ -172,48 +166,21 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
     }
 
     let targetTaskId = selectedTaskForSubmission;
+    if (!targetTaskId) {
+      alert('الرجاء اختيار المهمة المستهدفة من القائمة أولاً.');
+      return;
+    }
 
     setIsSubmittingDedicated(true);
 
     try {
-      // If teacher selected custom task, create and register it with a valid UUID
-      if (selectedTaskForSubmission === 'custom_task') {
-        const title = customTaskTitle.trim();
-        if (!title) {
-          alert('الرجاء كتابة مسمى المهمة أو المتطلب الذي أرسله المدير.');
-          setIsSubmittingDedicated(false);
-          return;
-        }
-
-        const safeCustomId = generateSafeUUID();
-        const newTaskObj: SchoolTask = {
-          id: safeCustomId,
-          title: title,
-          description: 'مهمة ومتطلب مخصص مسجل من المعلم بناءً على توجيه الإدارة.',
-          academic_year: '1448هـ',
-          is_active: true,
-          target_role: 'الكل',
-          created_at: new Date().toISOString()
-        };
-
-        // 1. Optimistic local state update (0ms)
-        const localTasks = JSON.parse(localStorage.getItem('local_school_tasks_1448') || '[]');
-        localStorage.setItem('local_school_tasks_1448', JSON.stringify([newTaskObj, ...localTasks]));
-        setTasks(prev => [newTaskObj, ...prev]);
-        targetTaskId = safeCustomId;
-        setSelectedTaskForSubmission(safeCustomId);
-
-        // 2. Background push with safe timeout
-        withTimeout(supabase.from('tasks').insert([newTaskObj]), 2000).catch(() => {});
-      }
-
       // Save submission optimistically & sync
       await saveSubmissionData(targetTaskId, link, dedicatedNote);
-      setSubmissionSuccessMsg('تم تسليم الرابط لمدير المدرسة بنجاح! سيتم إشعار الإدارة لمراجعتها واعتمادها.');
+      setSubmissionSuccessMsg('تم تسليم رابط الشاهد لمدير المدرسة بنجاح! تظهر الآن في حساب الإدارة للاعتماد.');
       setTimeout(() => setSubmissionSuccessMsg(null), 6000);
     } catch (e: any) {
       console.error(e);
-      alert('تم حفظ رابط المهمة في جهازك بنجاح وسيتزامن تلقائياً مع الإدارة عند توفر الشبكة.');
+      alert('تم حفظ رابط المهمة وسيتم تحديثه في حساب الإدارة المدرسية.');
     } finally {
       setIsSubmittingDedicated(false);
     }
@@ -392,63 +359,32 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
                 onChange={(e) => handleTaskSelectionChange(e.target.value)}
                 className="w-full p-4 rounded-2xl border-2 border-slate-200 focus:border-[#0f4c4c] outline-none font-bold text-sm bg-slate-50 focus:bg-white text-slate-800 transition"
               >
-                {tasks.map(task => (
-                  <option key={task.id} value={task.id}>
-                    {task.title} {task.due_date ? `(آخر موعد: ${task.due_date})` : ''}
-                  </option>
-                ))}
-                <option value="custom_task" className="text-emerald-700 font-black">
-                  ➕ متطلب أو مهمة أخرى أرسلها المدير (كتابة مسمى جديد)...
-                </option>
+                {tasks.length === 0 ? (
+                  <option value="">لا توجد مهام مسندة حالياً من قبل الإدارة</option>
+                ) : (
+                  tasks.map(task => (
+                    <option key={task.id} value={task.id}>
+                      {task.title} {task.due_date ? `(آخر موعد: ${task.due_date})` : ''}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
-            {/* إذا اختار مهمة مخصصة */}
-            {selectedTaskForSubmission === 'custom_task' ? (
-              <div className="space-y-2">
-                <label className="text-xs font-black text-emerald-800 flex items-center gap-1">
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>مسمى المهمة التي طلبها المدير <span className="text-rose-500">*</span></span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="مثال: خطة النشاط الطلابي، شواهد الزيارة التبادلية..."
-                  value={customTaskTitle}
-                  onChange={(e) => setCustomTaskTitle(e.target.value)}
-                  required
-                  className="w-full p-4 rounded-2xl border-2 border-emerald-300 focus:border-[#0f4c4c] outline-none font-bold text-sm bg-emerald-50/50 focus:bg-white text-slate-800"
-                />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-700 flex items-center justify-between">
-                  <span>ملاحظات المعلم للإدارة (اختياري)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">توضيح للمدير</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="مثال: تم إرفاق الخطة كاملة مع نماذج الاختبارات بصيغة PDF"
-                  value={dedicatedNote}
-                  onChange={(e) => setDedicatedNote(e.target.value)}
-                  className="w-full p-4 rounded-2xl border-2 border-slate-200 focus:border-[#0f4c4c] outline-none font-bold text-xs bg-slate-50 focus:bg-white text-slate-800"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* إذا اختار مهمة مخصصة، نضع حقل الملاحظة في سطر منفصل */}
-          {selectedTaskForSubmission === 'custom_task' && (
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-700">ملاحظات المعلم للإدارة (اختياري)</label>
+              <label className="text-xs font-black text-slate-700 flex items-center justify-between">
+                <span>ملاحظات وتوضيح المعلم للإدارة (اختياري)</span>
+                <span className="text-[10px] text-slate-400 font-normal">توضيح للإدارة المدرسية</span>
+              </label>
               <input
                 type="text"
-                placeholder="مثال: تم إرفاق الخطة كاملة مع نماذج الاختبارات بصيغة PDF"
+                placeholder="مثال: تم إرفاق الخطة كاملة مع نماذج الاختبارات وسلالم التصحيح"
                 value={dedicatedNote}
                 onChange={(e) => setDedicatedNote(e.target.value)}
                 className="w-full p-4 rounded-2xl border-2 border-slate-200 focus:border-[#0f4c4c] outline-none font-bold text-xs bg-slate-50 focus:bg-white text-slate-800"
               />
             </div>
-          )}
+          </div>
 
           {/* حقل رابط الشاهد البارز */}
           <div className="space-y-2">

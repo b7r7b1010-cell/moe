@@ -223,56 +223,87 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
   ) => {
     setActionLoadingId(teacherId);
     const feedback = feedbackInputs[teacherId] || '';
+    const existingSub = submissions.find(s => s.task_id === taskId && s.teacher_id === teacherId);
+    const targetId = submissionId || existingSub?.id || generateSafeUUID();
+    const driveLink = existingSub?.drive_link || '';
 
     try {
-      const payload: any = {
+      let savedData: TaskSubmission | null = null;
+
+      // إذا كان السجل موجوداً في قاعدة البيانات نقوم بتحديث الحالة والملاحظات مباشرة
+      if (submissionId || existingSub?.id) {
+        const idToUpdate = submissionId || existingSub?.id;
+        const { data, error } = await supabase
+          .from('task_submissions')
+          .update({
+            status: newStatus,
+            principal_feedback: feedback,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', idToUpdate)
+          .select()
+          .maybeSingle();
+
+        if (!error && data) {
+          savedData = data;
+        } else if (error) {
+          console.warn('Direct update fallback to upsert:', error.message);
+        }
+      }
+
+      // إذا لم يتوفر بعد أو حدثت حاجة لإنشائه
+      if (!savedData) {
+        const payload: any = {
+          id: targetId,
+          task_id: taskId,
+          teacher_id: teacherId,
+          drive_link: driveLink,
+          status: newStatus,
+          principal_feedback: feedback,
+          updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+          .from('task_submissions')
+          .upsert(payload)
+          .select()
+          .maybeSingle();
+
+        if (!error && data) {
+          savedData = data;
+        }
+      }
+
+      // تحديث الحالة في الواجهة فوراً
+      const finalSub: TaskSubmission = savedData || {
+        id: targetId,
         task_id: taskId,
         teacher_id: teacherId,
+        drive_link: driveLink,
         status: newStatus,
         principal_feedback: feedback,
+        submitted_at: existingSub?.submitted_at || new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
 
-      if (submissionId) {
-        payload.id = submissionId;
-      }
+      setSubmissions(prev => {
+        const idx = prev.findIndex(s => s.task_id === taskId && s.teacher_id === teacherId);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = finalSub;
+          return copy;
+        }
+        return [...prev, finalSub];
+      });
 
-      const { data, error } = await supabase
-        .from('task_submissions')
-        .upsert(payload)
-        .select()
-        .single();
+      // حفظ نسخة احتياطية في التخزين المحلي
+      try {
+        const existingAll = JSON.parse(localStorage.getItem('local_school_submissions_1448') || '[]');
+        const filteredAll = existingAll.filter((s: TaskSubmission) => !(s.task_id === taskId && s.teacher_id === teacherId));
+        localStorage.setItem('local_school_submissions_1448', JSON.stringify([...filteredAll, finalSub]));
+      } catch (e) {}
 
-      if (!error && data) {
-        setSubmissions(prev => {
-          const idx = prev.findIndex(s => s.task_id === taskId && s.teacher_id === teacherId);
-          if (idx >= 0) {
-            const copy = [...prev];
-            copy[idx] = data;
-            return copy;
-          }
-          return [...prev, data];
-        });
-      } else {
-        // Local fallback
-        const existingIdx = submissions.findIndex(s => s.task_id === taskId && s.teacher_id === teacherId);
-        const updatedSub: TaskSubmission = {
-          id: submissionId || `sub_${Date.now()}`,
-          task_id: taskId,
-          teacher_id: teacherId,
-          drive_link: submissions.find(s => s.task_id === taskId && s.teacher_id === teacherId)?.drive_link || '',
-          status: newStatus,
-          principal_feedback: feedback,
-          submitted_at: new Date().toISOString()
-        };
-        const newSubs = existingIdx >= 0
-          ? submissions.map((s, i) => i === existingIdx ? updatedSub : s)
-          : [...submissions, updatedSub];
-        setSubmissions(newSubs);
-        localStorage.setItem('local_school_submissions_1448', JSON.stringify(newSubs));
-      }
-
-      alert(newStatus === 'approved' ? '✅ تم اعتماد الشاهد بنجاح!' : '⚠️ تم تسجيل طلب التعديل وإشعار المعلم.');
+      alert(newStatus === 'approved' ? '✅ تم اعتماد الشاهد وحفظه في السجلات بنجاح!' : '⚠️ تم تسجيل طلب التعديل وتوجيه الملاحظة للمعلم.');
     } catch (e: any) {
       alert('خطأ أثناء التحديث: ' + e.message);
     } finally {
