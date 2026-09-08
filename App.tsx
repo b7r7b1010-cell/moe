@@ -2,10 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, safeSignOut } from './supabase';
 import { Profile, UserRole } from './types';
+import { withTimeout } from './lib/taskHelpers';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import PrincipalDashboard from './components/PrincipalDashboard';
-import { Loader2, WifiOff, RefreshCw, Clock, ShieldAlert, LogOut } from 'lucide-react';
+import { Loader2, WifiOff, RefreshCw, Clock, ShieldAlert, LogOut, ArrowRight, UserCheck } from 'lucide-react';
 
 // ملف App.tsx مع حماية كاملة من التعليق وإمكانية الدخول التجريبي السريع
 const DEMO_PRINCIPAL: Profile = {
@@ -79,6 +80,8 @@ function App() {
     setConnectionError(false);
   };
 
+  const [showLoadingBypass, setShowLoadingBypass] = useState(false);
+
   const initApp = async () => {
     setConnectionError(false);
 
@@ -103,15 +106,16 @@ function App() {
           setLoading(false);
 
           // مزامنة صامتة في الخلفية لتحديث البيانات دون أي تأثير على واجهة المستخدم
-          supabase.auth.getSession().then(({ data }) => {
+          withTimeout(supabase.auth.getSession(), 2500).then(({ data }) => {
             if (data?.session) {
               setSession(data.session);
-              supabase.from('profiles').select('*').eq('id', parsed.id).maybeSingle().then(({ data: updatedProf }) => {
-                if (updatedProf) {
-                  setProfile(updatedProf);
-                  localStorage.setItem('itqan_active_profile_1448', JSON.stringify(updatedProf));
-                }
-              });
+              withTimeout(supabase.from('profiles').select('*').eq('id', parsed.id).maybeSingle(), 2500)
+                .then(({ data: updatedProf }) => {
+                  if (updatedProf) {
+                    setProfile(updatedProf);
+                    localStorage.setItem('itqan_active_profile_1448', JSON.stringify(updatedProf));
+                  }
+                }).catch(() => {});
             }
           }).catch(() => {});
           return;
@@ -121,10 +125,10 @@ function App() {
       console.warn('Cache parse notice:', e);
     }
 
-    // 3. في حال عدم وجود جلسة محلية، نفحص Supabase Auth
+    // 3. في حال عدم وجود جلسة محلية، نفحص Supabase Auth مع حد أقصى للانتظار 2.5 ثانية
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await withTimeout(supabase.auth.getSession(), 2500);
       if (error) {
         console.warn('Session check returned notice:', error.message);
         setSession(null);
@@ -142,7 +146,7 @@ function App() {
         setLoading(false);
       }
     } catch (err: any) {
-      console.warn('initApp caught error:', err);
+      console.warn('initApp caught error/timeout:', err);
       setSession(null);
       setProfile(null);
       setLoading(false);
@@ -151,6 +155,21 @@ function App() {
 
   useEffect(() => {
     initApp();
+
+    // مؤقت حماية إضافي يمنع بقاء الشاشة معلقة نهائياً لأكثر من ثانيتين ونصف
+    const bypassTimer = setTimeout(() => {
+      setShowLoadingBypass(true);
+    }, 1500);
+
+    const safetyTimeout = setTimeout(() => {
+      setLoading((curr) => {
+        if (curr) {
+          console.warn('Safety timeout: forced loading to false');
+          return false;
+        }
+        return false;
+      });
+    }, 2800);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       try {
@@ -170,16 +189,19 @@ function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(bypassTimer);
+      clearTimeout(safetyTimeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const { data, error } = await withTimeout(
+        supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+        2500
+      );
 
       if (error) {
         console.warn('fetchProfile table notice:', error.message);
@@ -192,7 +214,7 @@ function App() {
         } catch (e) {}
       } else {
         try {
-          const { data: userData } = await supabase.auth.getUser();
+          const { data: userData } = await withTimeout(supabase.auth.getUser(), 2000);
           const meta = userData?.user?.user_metadata || {};
           const userEmail = userData?.user?.email || '';
           const phoneFromEmail = userEmail.includes('@') ? userEmail.split('@')[0] : '';
@@ -228,9 +250,28 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4 font-cairo text-right" dir="rtl">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 gap-4 font-cairo text-right" dir="rtl">
         <Loader2 className="w-12 h-12 text-emerald-600 animate-spin" />
-        <p className="text-slate-500 font-medium animate-pulse">جاري التحقق من الجلسة...</p>
+        <p className="text-slate-600 font-bold text-sm animate-pulse">جاري التحقق من الجلسة وسجل الدخول...</p>
+        
+        {showLoadingBypass && (
+          <div className="mt-4 flex flex-col sm:flex-row items-center gap-3 animate-fade-in">
+            <button
+              onClick={() => { setLoading(false); }}
+              className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-2 cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4 text-emerald-600" />
+              المتابعة لصفحة تسجيل الدخول فوراً
+            </button>
+            <button
+              onClick={() => handleDemoLogin('principal')}
+              className="bg-[#0f4c4c] hover:bg-[#134e4a] text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-md transition flex items-center gap-2 cursor-pointer"
+            >
+              <UserCheck className="w-4 h-4 text-emerald-300" />
+              دخول مباشر كمدير مدرسة 👑
+            </button>
+          </div>
+        )}
       </div>
     );
   }

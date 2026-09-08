@@ -989,7 +989,8 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
       {showPrintReport && selectedTask && (
         <PrintableTaskReport
           task={selectedTask}
-          staffList={getFilteredStaffForTask()}
+          allTasks={tasks}
+          staffList={activeStaffList}
           submissions={submissions}
           principalProfile={principalProfile}
           filterTitle={getPrintFilterTitle()}
