@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Profile, Evaluation, UserRole, EvaluationPeriod } from '../types';
+import { Profile, Evaluation, UserRole, EvaluationPeriod, SchoolTask, TaskSubmission } from '../types';
 import { CRITERIA_MAP } from '../constants';
 import { supabase } from '../supabase';
+import { isStaffTargetedByTask, withTimeout } from '../lib/taskHelpers';
+import { INITIAL_SCHOOL_TASKS } from '../lib/schoolTasksData';
 import { 
   X, Save, ExternalLink, 
   Award, Lightbulb, Info, Sparkles, FileText, Calculator, Folder, 
-  CheckCircle2, Loader2, Clock, Target, HelpCircle, Check
+  CheckCircle2, Loader2, Clock, Target, HelpCircle, Check, ClipboardList, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 interface Props {
@@ -25,9 +27,117 @@ const EvaluationModal: React.FC<Props> = ({ staff, initialPeriod = 'midterm', on
   const [existingEvalId, setExistingEvalId] = useState<string | null>(null);
   const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
 
+  // Teacher Task Submissions integration
+  const [teacherTasks, setTeacherTasks] = useState<Array<{ task: SchoolTask; submission?: TaskSubmission }>>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [showTasksSection, setShowTasksSection] = useState(true);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+
   useEffect(() => {
     fetchEvaluationForPeriod(period);
+    fetchTeacherTasks();
   }, [staff.id, period]);
+
+  const fetchTeacherTasks = async () => {
+    try {
+      setLoadingTasks(true);
+      let allTasks: SchoolTask[] = [];
+
+      try {
+        const { data: tData } = await withTimeout(
+          supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+          2000
+        );
+        if (tData && tData.length > 0) {
+          allTasks = tData;
+        }
+      } catch (e) {}
+
+      if (allTasks.length === 0) {
+        const localTasks = localStorage.getItem('local_school_tasks_1448');
+        allTasks = localTasks ? JSON.parse(localTasks) : INITIAL_SCHOOL_TASKS;
+      }
+
+      // Filter tasks targeting this staff member
+      const targeted = allTasks.filter(t => isStaffTargetedByTask(staff, t));
+
+      let staffSubs: TaskSubmission[] = [];
+      try {
+        const { data: sData } = await withTimeout(
+          supabase.from('task_submissions').select('*').eq('teacher_id', staff.id),
+          2000
+        );
+        if (sData && sData.length > 0) {
+          staffSubs = sData;
+        }
+      } catch (e) {}
+
+      if (staffSubs.length === 0) {
+        const localSubs = localStorage.getItem('local_school_submissions_1448');
+        if (localSubs) {
+          try {
+            staffSubs = JSON.parse(localSubs).filter((s: TaskSubmission) => s.teacher_id === staff.id);
+          } catch (e) {}
+        }
+      }
+
+      const combined = targeted.map(task => {
+        const sub = staffSubs.find(s => s.task_id === task.id);
+        return { task, submission: sub };
+      });
+
+      setTeacherTasks(combined);
+    } catch (err) {
+      console.warn('Error fetching teacher tasks in EvaluationModal:', err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const handleQuickApproveTask = async (taskId: string, submission?: TaskSubmission) => {
+    if (!submission?.id && !submission?.drive_link) {
+      alert('لم يقم المعلم برفع رابط لهذا المتطلب بعد.');
+      return;
+    }
+
+    setUpdatingTaskId(taskId);
+    try {
+      const payload: any = {
+        task_id: taskId,
+        teacher_id: staff.id,
+        drive_link: submission.drive_link,
+        status: 'approved',
+        updated_at: new Date().toISOString()
+      };
+      if (submission.id) payload.id = submission.id;
+
+      try {
+        await withTimeout(supabase.from('task_submissions').upsert(payload), 2500);
+      } catch (e) {}
+
+      // Update local state
+      setTeacherTasks(prev =>
+        prev.map(item =>
+          item.task.id === taskId
+            ? { ...item, submission: { ...item.submission!, status: 'approved' } }
+            : item
+        )
+      );
+
+      // Update localStorage
+      const localSubs = JSON.parse(localStorage.getItem('local_school_submissions_1448') || '[]');
+      const updatedLocal = localSubs.map((s: TaskSubmission) =>
+        s.task_id === taskId && s.teacher_id === staff.id ? { ...s, status: 'approved' } : s
+      );
+      localStorage.setItem('local_school_submissions_1448', JSON.stringify(updatedLocal));
+
+      alert('✅ تم اعتماد الشاهد لهذا المتطلب بنجاح!');
+    } catch (e: any) {
+      alert('خطأ: ' + e.message);
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
 
   const fetchEvaluationForPeriod = async (targetPeriod: EvaluationPeriod) => {
     // Reset state for selected period
@@ -215,8 +325,8 @@ const EvaluationModal: React.FC<Props> = ({ staff, initialPeriod = 'midterm', on
           {/* جدول المعايير وسلالم التقدير */}
           <div className="flex-1 overflow-auto p-6 md:p-8 bg-slate-50">
             
-            {/* بطاقات روابط الشواهد */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {/* بطاقات روابط الشواهد العامة */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               {staff.drive_link ? (
                 <a 
                   href={staff.drive_link} 
@@ -263,6 +373,125 @@ const EvaluationModal: React.FC<Props> = ({ staff, initialPeriod = 'midterm', on
                 <div className="flex items-center gap-3 bg-slate-100 p-4 rounded-2xl border border-slate-200 text-slate-400">
                   <Sparkles className="w-5 h-5 text-slate-400" />
                   <p className="text-xs font-bold">لم يرفع ملف الشواهد النهائي بعد</p>
+                </div>
+              )}
+            </div>
+
+            {/* قسم ربط الشواهد ومهام الفصل الدراسي المباشرة المسلمة من المعلم */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm mb-6 space-y-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-[#0f4c4c]/10 text-[#0f4c4c] rounded-2xl">
+                    <ClipboardList className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                      شواهد ومهام الفصل الدراسي المسلّمة من المعلم
+                      <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">
+                        {teacherTasks.filter(t => t.submission?.drive_link).length} من {teacherTasks.length} مستلم
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 font-bold">
+                      روابط الشواهد والمخرجات الفصلية للمعاينة السريعة أثناء رصد الدرجات
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowTasksSection(!showTasksSection)}
+                  className="text-xs font-black text-slate-500 hover:text-slate-800 flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-xl transition"
+                >
+                  {showTasksSection ? (
+                    <>إخفاء القائمة <ChevronUp className="w-3.5 h-3.5" /></>
+                  ) : (
+                    <>عرض الشواهد والمهام <ChevronDown className="w-3.5 h-3.5" /></>
+                  )}
+                </button>
+              </div>
+
+              {showTasksSection && (
+                <div>
+                  {loadingTasks ? (
+                    <div className="text-center py-4 text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> جاري جلب تسليمات المعلم...
+                    </div>
+                  ) : teacherTasks.length === 0 ? (
+                    <div className="text-center py-4 text-xs font-bold text-slate-400">
+                      لا توجد مهام فصلية محددة لهذا التخصص أو الدور الوظيفي حالياً.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                      {teacherTasks.map(({ task, submission }) => {
+                        const hasLink = !!submission?.drive_link;
+                        const isApproved = submission?.status === 'approved';
+                        const isUpdating = updatingTaskId === task.id;
+
+                        return (
+                          <div
+                            key={task.id}
+                            className={`p-3.5 rounded-2xl border text-right transition-all flex flex-col justify-between ${
+                              isApproved
+                                ? 'bg-emerald-50/60 border-emerald-200'
+                                : hasLink
+                                ? 'bg-blue-50/50 border-blue-200 hover:border-blue-300'
+                                : 'bg-slate-50/60 border-slate-200 opacity-80'
+                            }`}
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <h5 className="text-xs font-black text-slate-800 leading-snug line-clamp-1" title={task.title}>
+                                  {task.title}
+                                </h5>
+                                <span className={`shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                  isApproved
+                                    ? 'bg-emerald-200 text-emerald-900'
+                                    : hasLink
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-slate-200 text-slate-600'
+                                }`}>
+                                  {isApproved ? 'معتمد ✓' : hasLink ? 'قيد المراجعة' : 'لم يسلّم'}
+                                </span>
+                              </div>
+
+                              {submission?.teacher_notes && (
+                                <p className="text-[10px] text-slate-500 italic line-clamp-1" title={submission.teacher_notes}>
+                                  ملاحظة: {submission.teacher_notes}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="pt-3 flex items-center justify-between gap-2 border-t border-slate-200/60 mt-2">
+                              {hasLink ? (
+                                <a
+                                  href={submission.drive_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] font-black text-[#0f4c4c] bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition shadow-xs"
+                                >
+                                  <ExternalLink className="w-3 h-3" /> فتح الشاهد
+                                </a>
+                              ) : (
+                                <span className="text-[10px] font-bold text-slate-400">لا يوجد رابط</span>
+                              )}
+
+                              {hasLink && !isApproved && (
+                                <button
+                                  type="button"
+                                  disabled={isUpdating}
+                                  onClick={() => handleQuickApproveTask(task.id, submission)}
+                                  className="inline-flex items-center gap-1 text-[10px] font-black bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-xl shadow-xs transition"
+                                >
+                                  {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                  اعتماد
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

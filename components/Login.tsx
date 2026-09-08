@@ -148,7 +148,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           </div>
           <div className="bg-black/20 py-2.5 px-4 rounded-xl text-center border border-white/10 shadow-inner">
             <h2 className="text-base md:text-lg font-black font-cairo">نظام «إتقان 2.0» لإدارة الأداء الوظيفي</h2>
-            <p className="text-[10px] text-emerald-200 mt-0.5">وفق الدليل الإرشادي المعتمد لشاغلي الوظائف التعليمية</p>
+            <p className="text-xs font-bold text-emerald-200 mt-0.5 font-cairo">1448هـ</p>
           </div>
         </div>
         

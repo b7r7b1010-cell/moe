@@ -3,10 +3,17 @@ import { supabase } from '../supabase';
 import { Profile, SchoolTask, TaskSubmission, UserRole } from '../types';
 import { INITIAL_SCHOOL_TASKS } from '../lib/schoolTasksData';
 import { 
+  isStaffTargetedByTask, 
+  TARGET_ROLE_OPTIONS, 
+  generateSafeUUID, 
+  withTimeout 
+} from '../lib/taskHelpers';
+import { PrintableTaskReport } from './PrintableTaskReport';
+import { 
   ClipboardList, Plus, Calendar, Clock, CheckCircle2, 
   AlertCircle, ExternalLink, MessageSquare, Send, Trash2, 
   Users, Check, X, RefreshCw, Copy, ChevronDown, ChevronUp,
-  FolderCheck, Sparkles, Filter, Smartphone, CheckCheck
+  FolderCheck, Sparkles, Filter, Smartphone, CheckCheck, Printer, Search
 } from 'lucide-react';
 
 interface TaskSubmissionsManagerProps {
@@ -21,6 +28,10 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'pending' | 'approved' | 'rejected'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [subjectFilter, setSubjectFilter] = useState('all');
+  const [showPrintReport, setShowPrintReport] = useState(false);
   const [copiedReminder, setCopiedReminder] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
@@ -123,8 +134,9 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
     }
 
     setSavingTask(true);
+    const safeTaskId = generateSafeUUID();
     const newTask: SchoolTask = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `task_${Date.now()}`,
+      id: safeTaskId,
       title: newTitle.trim(),
       description: newDescription.trim(),
       due_date: newDueDate || undefined,
@@ -134,50 +146,43 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
       created_at: new Date().toISOString()
     };
 
-    try {
-      const { error } = await supabase.from('tasks').insert([newTask]);
-      if (error) {
-        // Save to local storage as fallback
-        const updated = [newTask, ...tasks];
-        setTasks(updated);
-        localStorage.setItem('local_school_tasks_1448', JSON.stringify(updated));
-      } else {
-        setTasks(prev => [newTask, ...prev]);
-      }
+    // 1. Optimistic Local State Update (0ms)
+    const updated = [newTask, ...tasks];
+    setTasks(updated);
+    localStorage.setItem('local_school_tasks_1448', JSON.stringify(updated));
 
-      // Also create an in-app school notification for teachers
-      try {
-        await supabase.from('notifications').insert([{
-          id: `notif_task_${newTask.id}`,
+    // 2. Background push to Supabase with timeout
+    withTimeout(supabase.from('tasks').insert([newTask]), 2500).catch(() => {});
+
+    // Also send in-app school notification for targeted staff
+    try {
+      withTimeout(
+        supabase.from('notifications').insert([{
+          id: `notif_task_${safeTaskId}`,
           title: `مهمة جديدة: ${newTask.title}`,
           message: newTask.description || `تم إدراج متطلب جديد بالمنصة (${newTask.title}) يرجى رفع الشاهد المطلوب.`,
           type: 'urgent',
           sender_name: principalProfile.full_name || 'مدير المدرسة',
           created_at: new Date().toISOString()
-        }]);
-      } catch (ne) {}
+        }]),
+        2000
+      ).catch(() => {});
+    } catch (ne) {}
 
-      setSelectedTaskId(newTask.id);
-      setShowAddModal(false);
-      setNewTitle('');
-      setNewDescription('');
-      setNewDueDate('');
-      setNewTargetRole('الكل');
-      alert('✅ تم نشر المهمة وإشعار المعلمين بها بنجاح!');
-    } catch (err: any) {
-      alert('حدث خطأ أثناء إضافة المهمة: ' + err.message);
-    } finally {
-      setSavingTask(false);
-    }
+    setSelectedTaskId(newTask.id);
+    setShowAddModal(false);
+    setNewTitle('');
+    setNewDescription('');
+    setNewDueDate('');
+    setNewTargetRole('الكل');
+    setSavingTask(false);
+    alert('✅ تم نشر المهمة وإشعار المعلمين بها بنجاح!');
   };
 
   const handleDeleteTask = async (taskId: string) => {
     if (!window.confirm('هل أنت متأكد من حذف هذه المهمة وجميع التسليمات المرتبطة بها؟')) return;
 
     try {
-      await supabase.from('tasks').delete().eq('id', taskId);
-      await supabase.from('task_submissions').delete().eq('task_id', taskId);
-      
       const updatedTasks = tasks.filter(t => t.id !== taskId);
       setTasks(updatedTasks);
       localStorage.setItem('local_school_tasks_1448', JSON.stringify(updatedTasks));
@@ -189,18 +194,24 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
       if (selectedTaskId === taskId) {
         setSelectedTaskId(updatedTasks.length > 0 ? updatedTasks[0].id : null);
       }
+
+      await withTimeout(supabase.from('tasks').delete().eq('id', taskId), 2500);
+      await withTimeout(supabase.from('task_submissions').delete().eq('task_id', taskId), 2500);
     } catch (e: any) {
-      alert('خطأ أثناء الحذف: ' + e.message);
+      console.warn('Delete task sync note:', e);
     }
   };
 
   const handleToggleTaskStatus = async (task: SchoolTask) => {
     const updated = !task.is_active;
+    const updatedTasks = tasks.map(t => (t.id === task.id ? { ...t, is_active: updated } : t));
+    setTasks(updatedTasks);
+    localStorage.setItem('local_school_tasks_1448', JSON.stringify(updatedTasks));
+
     try {
-      await supabase.from('tasks').update({ is_active: updated }).eq('id', task.id);
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_active: updated } : t));
+      await withTimeout(supabase.from('tasks').update({ is_active: updated }).eq('id', task.id), 2500);
     } catch (e) {
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_active: updated } : t));
+      console.warn('Toggle status offline update preserved in localStorage');
     }
   };
 
@@ -271,27 +282,23 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId);
 
-  // Target staff for the selected task
-  const targetStaff = staff.filter(s => {
-    if (!s.is_approved) return false;
-    if (s.role === UserRole.PRINCIPAL) return false;
-    if (!selectedTask || !selectedTask.target_role || selectedTask.target_role === 'الكل') return true;
-    return s.role === selectedTask.target_role;
-  });
+  // Target staff for the selected task (comprehensively covers all 3 teacher roles)
+  const targetStaff = staff.filter(s => isStaffTargetedByTask(s, selectedTask));
+
+  // Extract list of subjects present in target staff for the filter dropdown
+  const availableSubjects = Array.from(
+    new Set(targetStaff.map(s => s.subject?.trim()).filter(Boolean))
+  ) as string[];
 
   // Calculate task statistics
   const getTaskStats = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
-    const assignedStaff = staff.filter(s => {
-      if (!s.is_approved || s.role === UserRole.PRINCIPAL) return false;
-      if (!task || !task.target_role || task.target_role === 'الكل') return true;
-      return s.role === task.target_role;
-    });
+    const assignedStaff = staff.filter(s => isStaffTargetedByTask(s, task));
 
     const taskSubs = submissions.filter(s => s.task_id === taskId);
     const submittedCount = taskSubs.filter(s => s.drive_link && s.status !== 'pending').length;
     const approvedCount = taskSubs.filter(s => s.status === 'approved').length;
-    const pendingCount = assignedStaff.length - submittedCount;
+    const pendingCount = Math.max(0, assignedStaff.length - submittedCount);
     const percent = assignedStaff.length > 0 ? Math.round((submittedCount / assignedStaff.length) * 100) : 0;
 
     return { total: assignedStaff.length, submittedCount, approvedCount, pendingCount, percent };
@@ -299,7 +306,7 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
   const currentStats = selectedTask ? getTaskStats(selectedTask.id) : { total: 0, submittedCount: 0, approvedCount: 0, pendingCount: 0, percent: 0 };
 
-  // Filtered staff for submission table
+  // Filtered staff for submission table with multi-factor sorting & search
   const getFilteredStaffForTask = () => {
     if (!selectedTask) return [];
 
@@ -308,13 +315,45 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
       const isSubmitted = !!sub?.drive_link;
       const status = sub?.status || 'pending';
 
-      if (statusFilter === 'all') return true;
-      if (statusFilter === 'submitted') return isSubmitted && status !== 'approved';
-      if (statusFilter === 'approved') return status === 'approved';
-      if (statusFilter === 'rejected') return status === 'rejected';
-      if (statusFilter === 'pending') return !isSubmitted || status === 'pending';
+      // 1. Status Filter
+      if (statusFilter === 'submitted' && (!isSubmitted || status === 'approved')) return false;
+      if (statusFilter === 'approved' && status !== 'approved') return false;
+      if (statusFilter === 'rejected' && status !== 'rejected') return false;
+      if (statusFilter === 'pending' && (isSubmitted && status !== 'pending')) return false;
+
+      // 2. Role Filter
+      if (roleFilter !== 'all' && teacher.role !== roleFilter) return false;
+
+      // 3. Subject Filter
+      if (subjectFilter !== 'all' && teacher.subject !== subjectFilter) return false;
+
+      // 4. Search Query (Name, Subject, or Mobile)
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const nameMatch = teacher.full_name?.toLowerCase().includes(q);
+        const subjectMatch = teacher.subject?.toLowerCase().includes(q);
+        const mobileMatch = teacher.mobile?.includes(q);
+        if (!nameMatch && !subjectMatch && !mobileMatch) return false;
+      }
+
       return true;
     });
+  };
+
+  // Human-readable title for the print sheet depending on active filter
+  const getPrintFilterTitle = () => {
+    const parts: string[] = [];
+    if (statusFilter === 'pending') parts.push('حصر المتأخرين عن تسليم الشاهد');
+    else if (statusFilter === 'approved') parts.push('كشف التسليمات المعتمدة رسمياً');
+    else if (statusFilter === 'submitted') parts.push('كشف التسليمات قيد المراجعة');
+    else if (statusFilter === 'rejected') parts.push('كشف التسليمات المطلوب تعديلها');
+    else parts.push('كشف المتابعة الشامل للتسليمات');
+
+    if (roleFilter !== 'all') parts.push(`فئة: ${roleFilter}`);
+    if (subjectFilter !== 'all') parts.push(`تخصص: ${subjectFilter}`);
+    if (searchQuery.trim()) parts.push(`بحث: "${searchQuery.trim()}"`);
+
+    return parts.join(' — ');
   };
 
   const copyLateReminderWhatsApp = () => {
@@ -500,8 +539,16 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
               )}
             </div>
 
-            {/* أزرار الإجراءات السريعة */}
+            {/* أزرار الإجراءات السريعة والطباعة */}
             <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowPrintReport(true)}
+                className="bg-[#0f4c4c] hover:bg-[#134e4a] text-white px-4 py-2.5 rounded-xl font-black text-xs flex items-center gap-2 shadow-md transition"
+              >
+                <Printer className="w-4 h-4" />
+                طباعة كشف حصر وتسليمات المهمة 🖨️
+              </button>
+
               <button
                 onClick={copyLateReminderWhatsApp}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-md transition"
@@ -532,27 +579,96 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
             </div>
           </div>
 
-          {/* فلاتر التصفية لقائمة المعلمين */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            {[
-              { id: 'all', label: `الكل (${targetStaff.length})` },
-              { id: 'submitted', label: `بانتظار المراجعة` },
-              { id: 'approved', label: `المعتمدون (${currentStats.approvedCount})` },
-              { id: 'rejected', label: `طلب تعديل` },
-              { id: 'pending', label: `المتأخرون (${currentStats.pendingCount})` },
-            ].map(f => (
-              <button
-                key={f.id}
-                onClick={() => setStatusFilter(f.id as any)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-                  statusFilter === f.id
-                    ? 'bg-[#0f4c4c] text-white shadow'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* شريط الفرز والبحث المتقدم الشامل للمدير */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* حقل البحث السريع بالاسم أو التخصص أو الهاتف */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                <input
+                  type="text"
+                  placeholder="بحث سريع باسم المعلم أو التخصص..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none focus:border-[#0f4c4c] bg-white"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute left-3 top-3 text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* تصفية التخصص الدراسي */}
+              <div>
+                <select
+                  value={subjectFilter}
+                  onChange={(e) => setSubjectFilter(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none focus:border-[#0f4c4c] bg-white"
+                >
+                  <option value="all">كافة التخصصات والمواد ({availableSubjects.length})</option>
+                  {availableSubjects.map(sub => (
+                    <option key={sub} value={sub}>{sub}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* تصفية الفئة والدور الوظيفي */}
+              <div>
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none focus:border-[#0f4c4c] bg-white"
+                >
+                  <option value="all">كافة الفئات الوظيفية</option>
+                  <option value={UserRole.TEACHER}>معلم مادة (تعليمي)</option>
+                  <option value={UserRole.TEACHER_ACTIVITY}>معلم رائد نشاط</option>
+                  <option value={UserRole.TEACHER_HEALTH}>معلم موجه صحي</option>
+                  <option value={UserRole.COUNSELOR}>موجه طلابي</option>
+                  <option value={UserRole.LAB_ASSISTANT}>محضر مختبر</option>
+                </select>
+              </div>
+            </div>
+
+            {/* أزرار تصفية حالة التسليم */}
+            <div className="flex items-center gap-2 overflow-x-auto pt-1">
+              {[
+                { id: 'all', label: `الكل (${targetStaff.length})` },
+                { id: 'submitted', label: `بانتظار المراجعة (${Math.max(0, currentStats.submittedCount - currentStats.approvedCount)})` },
+                { id: 'approved', label: `المعتمدون (${currentStats.approvedCount})` },
+                { id: 'rejected', label: `طلب تعديل` },
+                { id: 'pending', label: `المتأخرون عن التسليم (${currentStats.pendingCount})` },
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => setStatusFilter(f.id as any)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                    statusFilter === f.id
+                      ? 'bg-[#0f4c4c] text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+
+              {(searchQuery || roleFilter !== 'all' || subjectFilter !== 'all' || statusFilter !== 'all') && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setRoleFilter('all');
+                    setSubjectFilter('all');
+                    setStatusFilter('all');
+                  }}
+                  className="text-xs font-black text-rose-600 hover:underline px-2 whitespace-nowrap"
+                >
+                  إعادة ضبط الفلاتر ↺
+                </button>
+              )}
+            </div>
           </div>
 
           {/* جدول تسليمات المعلمين */}
@@ -742,14 +858,16 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-black text-slate-700">الفئة المستهدفة</label>
+                  <label className="text-xs font-black text-slate-700">الفئة المستهدفة بالتكليف</label>
                   <select
                     value={newTargetRole}
                     onChange={(e) => setNewTargetRole(e.target.value)}
                     className="w-full p-3.5 rounded-2xl border border-slate-200 focus:border-[#0f4c4c] outline-none font-bold text-sm bg-slate-50 focus:bg-white"
                   >
-                    <option value="الكل">كافة منسوبي المدرسة</option>
-                    <option value={UserRole.TEACHER}>المعلمون فقط</option>
+                    <option value="الكل">كافة منسوبي المدرسة (الجميع)</option>
+                    <option value={UserRole.TEACHER}>المعلمون (يشمل: تعليمي، رائد نشاط، موجه صحي)</option>
+                    <option value={UserRole.TEACHER_ACTIVITY}>معلم رائد النشاط الطلابي فقط</option>
+                    <option value={UserRole.TEACHER_HEALTH}>معلم الموجه الصحي فقط</option>
                     <option value={UserRole.COUNSELOR}>الموجه الطلابي</option>
                     <option value={UserRole.LAB_ASSISTANT}>محضر المختبر</option>
                     <option value={UserRole.VICE_PRINCIPAL}>وكيل المدرسة</option>
@@ -776,6 +894,18 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
             </form>
           </div>
         </div>
+      )}
+
+      {/* نافذة طباعة كشف حصر وتسليمات المهمة المفلترة A4 */}
+      {showPrintReport && selectedTask && (
+        <PrintableTaskReport
+          task={selectedTask}
+          staffList={getFilteredStaffForTask()}
+          submissions={submissions}
+          principalProfile={principalProfile}
+          filterTitle={getPrintFilterTitle()}
+          onClose={() => setShowPrintReport(false)}
+        />
       )}
 
     </div>

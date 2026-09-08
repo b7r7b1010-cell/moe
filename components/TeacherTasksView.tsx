@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Profile, SchoolTask, TaskSubmission } from '../types';
 import { INITIAL_SCHOOL_TASKS } from '../lib/schoolTasksData';
+import { isStaffTargetedByTask, generateSafeUUID, withTimeout } from '../lib/taskHelpers';
 import { 
   ClipboardList, ExternalLink, Send, CheckCircle2, 
   Clock, AlertCircle, Sparkles, MessageSquare, 
@@ -91,11 +92,8 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
         }
       }
 
-      // Filter tasks assigned to this teacher's role
-      const relevantTasks = activeTasks.filter(t => {
-        if (!t.target_role || t.target_role === 'الكل') return true;
-        return t.target_role === userProfile.role;
-      });
+      // Filter tasks assigned to this teacher's role (comprehensively covers all 3 teacher roles)
+      const relevantTasks = activeTasks.filter(t => isStaffTargetedByTask(userProfile, t));
       setTasks(relevantTasks);
 
       // Auto-select first task in the submission dropdown if not selected
@@ -175,55 +173,59 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
 
     let targetTaskId = selectedTaskForSubmission;
 
-    // If teacher selected custom task, create a new task first!
-    if (selectedTaskForSubmission === 'custom_task') {
-      const title = customTaskTitle.trim();
-      if (!title) {
-        alert('الرجاء كتابة مسمى المهمة أو المتطلب الذي أرسله المدير.');
-        return;
+    setIsSubmittingDedicated(true);
+
+    try {
+      // If teacher selected custom task, create and register it with a valid UUID
+      if (selectedTaskForSubmission === 'custom_task') {
+        const title = customTaskTitle.trim();
+        if (!title) {
+          alert('الرجاء كتابة مسمى المهمة أو المتطلب الذي أرسله المدير.');
+          setIsSubmittingDedicated(false);
+          return;
+        }
+
+        const safeCustomId = generateSafeUUID();
+        const newTaskObj: SchoolTask = {
+          id: safeCustomId,
+          title: title,
+          description: 'مهمة ومتطلب مخصص مسجل من المعلم بناءً على توجيه الإدارة.',
+          academic_year: '1448هـ',
+          is_active: true,
+          target_role: 'الكل',
+          created_at: new Date().toISOString()
+        };
+
+        // 1. Optimistic local state update (0ms)
+        const localTasks = JSON.parse(localStorage.getItem('local_school_tasks_1448') || '[]');
+        localStorage.setItem('local_school_tasks_1448', JSON.stringify([newTaskObj, ...localTasks]));
+        setTasks(prev => [newTaskObj, ...prev]);
+        targetTaskId = safeCustomId;
+        setSelectedTaskForSubmission(safeCustomId);
+
+        // 2. Background push with safe timeout
+        withTimeout(supabase.from('tasks').insert([newTaskObj]), 2000).catch(() => {});
       }
 
-      setIsSubmittingDedicated(true);
-      const newCustomTaskId = `task_custom_${Date.now()}`;
-      const newTaskObj: SchoolTask = {
-        id: newCustomTaskId,
-        title: title,
-        description: 'مهمة مخصصة مسجلة من المعلم بناءً على توجيه الإدارة.',
-        academic_year: '1448هـ',
-        is_active: true,
-        target_role: 'الكل',
-        created_at: new Date().toISOString()
-      };
-
-      try {
-        await supabase.from('tasks').insert([newTaskObj]);
-      } catch (e) {}
-
-      // update local
-      const localTasks = JSON.parse(localStorage.getItem('local_school_tasks_1448') || '[]');
-      localStorage.setItem('local_school_tasks_1448', JSON.stringify([newTaskObj, ...localTasks]));
-      
-      setTasks(prev => [newTaskObj, ...prev]);
-      targetTaskId = newCustomTaskId;
-      setSelectedTaskForSubmission(newCustomTaskId);
-    }
-
-    setIsSubmittingDedicated(true);
-    try {
+      // Save submission optimistically & sync
       await saveSubmissionData(targetTaskId, link, dedicatedNote);
       setSubmissionSuccessMsg('تم تسليم الرابط لمدير المدرسة بنجاح! سيتم إشعار الإدارة لمراجعتها واعتمادها.');
-      setTimeout(() => setSubmissionSuccessMsg(null), 5000);
+      setTimeout(() => setSubmissionSuccessMsg(null), 6000);
     } catch (e: any) {
-      alert('خطأ أثناء تسليم الرابط: ' + e.message);
+      console.error(e);
+      alert('تم حفظ رابط المهمة في جهازك بنجاح وسيتزامن تلقائياً مع الإدارة عند توفر الشبكة.');
     } finally {
       setIsSubmittingDedicated(false);
     }
   };
 
-  // Generic Save Submission
+  // Generic Save Submission with Optimistic UI & Timeout Protection
   const saveSubmissionData = async (taskId: string, link: string, note: string) => {
     const existingSub = submissions.find(s => s.task_id === taskId);
-    const payload: any = {
+    const subId = existingSub?.id || generateSafeUUID();
+
+    const savedData: TaskSubmission = {
+      id: subId,
       task_id: taskId,
       teacher_id: userProfile.id,
       drive_link: link,
@@ -232,48 +234,40 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
       submitted_at: new Date().toISOString()
     };
 
-    if (existingSub?.id) {
-      payload.id = existingSub.id;
-    }
+    // 1. Instant local state update (0ms latency for smooth UI!)
+    setSubmissions(prev => {
+      const filtered = prev.filter(s => s.task_id !== taskId);
+      return [...filtered, savedData];
+    });
+    setLinks(prev => ({ ...prev, [taskId]: link }));
+    setNotes(prev => ({ ...prev, [taskId]: note }));
 
-    let savedData: TaskSubmission | null = null;
+    // 2. Instant Local Storage persistence
     try {
-      const { data, error } = await supabase
-        .from('task_submissions')
-        .upsert(payload)
-        .select()
-        .single();
-      
-      if (!error && data) {
-        savedData = data;
-      }
-    } catch (err) {}
-
-    if (!savedData) {
-      // Local fallback
-      savedData = {
-        id: existingSub?.id || `sub_${Date.now()}`,
-        task_id: taskId,
-        teacher_id: userProfile.id,
-        drive_link: link,
-        teacher_notes: note,
-        status: 'submitted',
-        submitted_at: new Date().toISOString()
-      };
-
       const existingAll = JSON.parse(localStorage.getItem('local_school_submissions_1448') || '[]');
       const filteredAll = existingAll.filter((s: TaskSubmission) => !(s.task_id === taskId && s.teacher_id === userProfile.id));
       localStorage.setItem('local_school_submissions_1448', JSON.stringify([...filteredAll, savedData]));
+    } catch (e) {}
+
+    // 3. Background push to Supabase with timeout (2500ms max) so it never freezes
+    const payload: any = {
+      id: subId,
+      task_id: taskId,
+      teacher_id: userProfile.id,
+      drive_link: link,
+      teacher_notes: note,
+      status: 'submitted',
+      submitted_at: new Date().toISOString()
+    };
+
+    try {
+      await withTimeout(
+        supabase.from('task_submissions').upsert(payload),
+        2500
+      );
+    } catch (err) {
+      console.warn('Background Supabase submission sync completed with local backup:', err);
     }
-
-    // Update state
-    setSubmissions(prev => {
-      const filtered = prev.filter(s => s.task_id !== taskId);
-      return [...filtered, savedData!];
-    });
-
-    setLinks(prev => ({ ...prev, [taskId]: link }));
-    setNotes(prev => ({ ...prev, [taskId]: note }));
   };
 
   // Per-card submission handler

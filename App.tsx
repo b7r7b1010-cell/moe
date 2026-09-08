@@ -7,6 +7,28 @@ import Dashboard from './components/Dashboard';
 import PrincipalDashboard from './components/PrincipalDashboard';
 import { Loader2, WifiOff, RefreshCw, Clock, ShieldAlert, LogOut } from 'lucide-react';
 
+// ملف App.tsx مع حماية كاملة من التعليق وإمكانية الدخول التجريبي السريع
+const DEMO_PRINCIPAL: Profile = {
+  id: 'demo-principal-01',
+  full_name: 'أ. فهد بن عبدالله الشهري (مدير المدرسة)',
+  role: UserRole.PRINCIPAL,
+  mobile: '0500000001',
+  is_approved: true,
+  drive_link: 'https://drive.google.com/drive/folders/demo-principal',
+  created_at: new Date().toISOString()
+};
+
+const DEMO_TEACHER: Profile = {
+  id: 'demo-teacher-01',
+  full_name: 'أ. خالد بن محمد الحربي (معلم رياضيات)',
+  role: UserRole.TEACHER,
+  subject: 'الرياضيات',
+  mobile: '0555555555',
+  is_approved: true,
+  drive_link: 'https://drive.google.com/drive/folders/demo-teacher',
+  created_at: new Date().toISOString()
+};
+
 function App() {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -14,17 +36,48 @@ function App() {
   const [connectionError, setConnectionError] = useState(false);
 
   const handleGlobalLogout = async () => {
-    await safeSignOut();
+    try {
+      sessionStorage.removeItem('itqan_demo_user');
+      await safeSignOut();
+    } catch (e) {}
     setSession(null);
     setProfile(null);
     setLoading(false);
   };
 
+  const handleDemoLogin = (type: 'principal' | 'teacher') => {
+    const chosen = type === 'principal' ? DEMO_PRINCIPAL : DEMO_TEACHER;
+    sessionStorage.setItem('itqan_demo_user', type);
+    setProfile(chosen);
+    setSession({ user: { id: chosen.id, email: `${chosen.mobile}@school.local` } });
+    setLoading(false);
+    setConnectionError(false);
+  };
+
   const initApp = async () => {
     setLoading(true);
     setConnectionError(false);
+
+    // 1. التحقق أولاً من وجود جلسة تجريبية نشطة
+    const activeDemo = sessionStorage.getItem('itqan_demo_user');
+    if (activeDemo === 'principal') {
+      handleDemoLogin('principal');
+      return;
+    } else if (activeDemo === 'teacher') {
+      handleDemoLogin('teacher');
+      return;
+    }
+
+    // 2. فحص جلسة Supabase مع مؤقت زمني صارم (2.5 ثانية) لعدم تعليق المعاينة
     try {
-      const { data, error } = await supabase.auth.getSession();
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<{ data: { session: null }; error: null }>((resolve) =>
+        setTimeout(() => resolve({ data: { session: null }, error: null }), 2500)
+      );
+
+      const res = await Promise.race([sessionPromise, timeoutPromise]);
+      const data = res?.data;
+      const error = (res as any)?.error;
       
       if (error) {
         console.warn('Session check returned error:', error.message);
@@ -41,7 +94,7 @@ function App() {
         setLoading(false);
       }
     } catch (err: any) {
-      console.warn('initApp caught error:', err);
+      console.warn('initApp caught error or timeout:', err);
       const errMsg = err?.message || String(err || '');
       if (errMsg.includes('Refresh Token') || errMsg.includes('refresh_token')) {
         await handleGlobalLogout();
@@ -49,7 +102,10 @@ function App() {
         setConnectionError(true);
         setLoading(false);
       } else {
-        await handleGlobalLogout();
+        // بدلاً من التجميد، نفتح صفحة الدخول
+        setSession(null);
+        setProfile(null);
+        setLoading(false);
       }
     }
   };
@@ -149,16 +205,33 @@ function App() {
   if (connectionError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-red-50 p-4 font-cairo text-right" dir="rtl">
-        <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-red-100 text-center">
-          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <WifiOff className="w-10 h-10 text-red-600" />
+        <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-red-100 text-center space-y-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+            <WifiOff className="w-8 h-8 text-red-600" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-4">فشل الاتصال</h2>
-          <p className="text-slate-600 mb-8 leading-relaxed">
-            حدث خطأ أثناء محاولة الوصول لقاعدة البيانات أو انتهت صلاحية الجلسة.
+          <h2 className="text-xl font-bold text-slate-800">تعذر الاتصال بالخادم</h2>
+          <p className="text-xs text-slate-600 leading-relaxed font-bold">
+            يمكنك تجربة المعاينة الفورية بكافة الميزات دون انتظار الاتصال بالخادم:
           </p>
-          <button onClick={initApp} className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2">
-            <RefreshCw className="w-5 h-5" /> تحديث الصفحة
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <button
+              onClick={() => handleDemoLogin('principal')}
+              className="bg-[#0f4c4c] text-white py-3 rounded-xl font-black text-xs hover:bg-[#134e4a] transition shadow-xs"
+            >
+              معاينة كمدير مدرسة 👑
+            </button>
+            <button
+              onClick={() => handleDemoLogin('teacher')}
+              className="bg-emerald-600 text-white py-3 rounded-xl font-black text-xs hover:bg-emerald-700 transition shadow-xs"
+            >
+              معاينة كمعلم 🎓
+            </button>
+          </div>
+          <button 
+            onClick={initApp} 
+            className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" /> إعادة محاولة الاتصال
           </button>
         </div>
       </div>
