@@ -4,8 +4,10 @@ import { Printer, X, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 
 interface Props {
   task: SchoolTask;
-  items: Array<{ teacher: Profile; submission?: TaskSubmission }>;
-  stats: {
+  staffList?: Profile[];
+  items?: Array<{ teacher: Profile; submission?: TaskSubmission }>;
+  submissions?: TaskSubmission[];
+  stats?: {
     total: number;
     submittedCount: number;
     approvedCount: number;
@@ -13,16 +15,20 @@ interface Props {
     percent: number;
   };
   filterTitle: string;
+  principalProfile?: Profile;
   principalName?: string;
   onClose: () => void;
 }
 
 export const PrintableTaskReport: React.FC<Props> = ({
   task,
-  items,
-  stats,
+  staffList = [],
+  items: directItems,
+  submissions = [],
+  stats: directStats,
   filterTitle,
-  principalName = 'أ. عبدالله علي الشهري',
+  principalProfile,
+  principalName: propPrincipalName,
   onClose,
 }) => {
   const currentDate = new Date().toLocaleDateString('ar-SA', {
@@ -30,6 +36,24 @@ export const PrintableTaskReport: React.FC<Props> = ({
     month: 'long',
     day: 'numeric',
   });
+
+  // Calculate items safely if staffList was passed
+  const reportItems = directItems || staffList.map(teacher => {
+    const sub = submissions.find(s => s.task_id === task.id && s.teacher_id === teacher.id);
+    return { teacher, submission: sub };
+  });
+
+  // Calculate stats safely if not provided
+  const reportStats = directStats || (() => {
+    const total = reportItems.length;
+    const submittedCount = reportItems.filter(i => i.submission?.drive_link && i.submission?.status !== 'pending').length;
+    const approvedCount = reportItems.filter(i => i.submission?.status === 'approved').length;
+    const pendingCount = reportItems.filter(i => !i.submission?.drive_link || i.submission?.status === 'pending').length;
+    const percent = total > 0 ? Math.round((submittedCount / total) * 100) : 0;
+    return { total, submittedCount, approvedCount, pendingCount, percent };
+  })();
+
+  const effectivePrincipalName = principalProfile?.full_name || propPrincipalName || 'أ. عبدالله علي الشهري';
 
   const handlePrint = () => {
     window.print();
@@ -42,7 +66,7 @@ export const PrintableTaskReport: React.FC<Props> = ({
         <div className="flex items-center gap-3">
           <span className="text-sm font-black text-slate-800">معاينة التقرير الإشرافي للطباعة (A4)</span>
           <span className="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-bold">
-            عدد السجلات: {items.length}
+            عدد السجلات: {reportItems.length}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -109,23 +133,23 @@ export const PrintableTaskReport: React.FC<Props> = ({
           <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 text-center min-w-[70px]">
               <span className="text-[10px] text-slate-500 block font-bold">المستهدفون</span>
-              <span className="text-sm font-black text-slate-800">{stats.total}</span>
+              <span className="text-sm font-black text-slate-800">{reportStats.total}</span>
             </div>
             <div className="bg-white px-3 py-2 rounded-xl border border-blue-200 text-center min-w-[70px]">
               <span className="text-[10px] text-blue-600 block font-bold">سلّموا</span>
-              <span className="text-sm font-black text-blue-700">{stats.submittedCount}</span>
+              <span className="text-sm font-black text-blue-700">{reportStats.submittedCount}</span>
             </div>
             <div className="bg-white px-3 py-2 rounded-xl border border-emerald-200 text-center min-w-[70px]">
               <span className="text-[10px] text-emerald-600 block font-bold">اعتمدوا</span>
-              <span className="text-sm font-black text-emerald-700">{stats.approvedCount}</span>
+              <span className="text-sm font-black text-emerald-700">{reportStats.approvedCount}</span>
             </div>
             <div className="bg-white px-3 py-2 rounded-xl border border-rose-200 text-center min-w-[70px]">
               <span className="text-[10px] text-rose-600 block font-bold">لم يسلموا</span>
-              <span className="text-sm font-black text-rose-700">{stats.pendingCount}</span>
+              <span className="text-sm font-black text-rose-700">{reportStats.pendingCount}</span>
             </div>
             <div className="bg-[#0f4c4c] text-white px-3 py-2 rounded-xl text-center min-w-[75px]">
               <span className="text-[10px] text-emerald-200 block font-bold">نسبة الإنجاز</span>
-              <span className="text-sm font-black">{stats.percent}%</span>
+              <span className="text-sm font-black">{reportStats.percent}%</span>
             </div>
           </div>
         </div>
@@ -146,7 +170,7 @@ export const PrintableTaskReport: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 font-bold">
-              {items.map((item, idx) => {
+              {reportItems.map((item, idx) => {
                 const isSubmitted = !!item.submission?.drive_link;
                 const status = item.submission?.status || 'pending';
 
@@ -214,7 +238,7 @@ export const PrintableTaskReport: React.FC<Props> = ({
 
           <div className="space-y-6">
             <p>يعتمد مدير المدرسة</p>
-            <p className="text-emerald-900 font-black">{principalName}</p>
+            <p className="text-emerald-900 font-black">{effectivePrincipalName}</p>
             <div className="h-10 border-b border-dotted border-slate-400 w-32 mx-auto" />
           </div>
         </div>

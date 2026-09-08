@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, testSupabaseConnection, safeSignOut } from '../supabase';
-import { UserRole } from '../types';
+import { UserRole, Profile } from '../types';
 import { 
   KeyRound, Phone, UserPlus, LogIn, 
   RefreshCw, User, Briefcase, GraduationCap, 
@@ -9,7 +9,11 @@ import {
 } from 'lucide-react';
 import { MobileInstallModal } from './MobileInstallModal';
 
-const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
+interface LoginProps {
+  onLogin?: (session?: any, profile?: Profile) => void;
+}
+
+const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -108,7 +112,7 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           setIsRegistering(false);
         }
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({ 
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ 
           email: internalEmail, 
           password 
         });
@@ -123,7 +127,45 @@ const Login: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           }
           throw signInError;
         }
-        onLogin();
+
+        if (signInData?.session?.user) {
+          const user = signInData.session.user;
+          let userProf: Profile | null = null;
+          try {
+            const { data: dbProf } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .maybeSingle();
+            userProf = dbProf;
+          } catch (e) {
+            console.warn('Profiles query notice:', e);
+          }
+
+          if (!userProf) {
+            const meta = user.user_metadata || {};
+            userProf = {
+              id: user.id,
+              full_name: meta.full_name || (cleanMobile === '0504610160' ? 'أ. فهد بن عبدالله الشهري (المدير)' : `أ. ${cleanMobile}`),
+              role: meta.role || (cleanMobile === '0504610160' ? UserRole.PRINCIPAL : UserRole.TEACHER),
+              mobile: cleanMobile,
+              subject: meta.subject || '',
+              is_approved: meta.role === UserRole.PRINCIPAL || cleanMobile === '0504610160',
+              created_at: new Date().toISOString()
+            };
+          }
+
+          // حفظ البروفايل في التخزين المحلي لضمان بقاء الجلسة عند الضغط على F5
+          try {
+            localStorage.setItem('itqan_active_profile_1448', JSON.stringify(userProf));
+          } catch (e) {}
+
+          if (onLogin) {
+            onLogin(signInData.session, userProf);
+          }
+        } else if (onLogin) {
+          onLogin();
+        }
       }
     } catch (err: any) {
       alert(err.message);

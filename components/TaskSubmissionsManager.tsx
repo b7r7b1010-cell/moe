@@ -389,19 +389,50 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
   const copyLateReminderWhatsApp = () => {
     if (!selectedTask) return;
-    const lateTeachers = targetStaff.filter(teacher => {
-      const sub = submissions.find(s => s.task_id === selectedTask.id && s.teacher_id === teacher.id);
-      return !sub?.drive_link || sub.status === 'pending';
-    });
+    try {
+      const lateTeachers = (targetStaff || []).filter(teacher => {
+        const sub = (submissions || []).find(s => s.task_id === selectedTask.id && s.teacher_id === teacher.id);
+        return !sub?.drive_link || sub.status === 'pending';
+      });
 
-    const deadlineText = selectedTask.due_date ? `والمحدد بتاريخ: ${selectedTask.due_date}` : '';
-    const namesList = lateTeachers.map((t, i) => `${i + 1}. أ. ${t.full_name} (${t.subject || t.role})`).join('\n');
+      const deadlineText = selectedTask.due_date ? `والمحدد بتاريخ: ${selectedTask.due_date}` : '';
+      const namesList = lateTeachers.length > 0
+        ? lateTeachers.map((t, i) => `${i + 1}. أ. ${t.full_name} (${t.subject || t.role})`).join('\n')
+        : 'الجميع قام بالتسليم بارك الله فيكم ✨';
 
-    const msg = `السلام عليكم ورحمة الله وبركاته، الزملاء الكرام في ثانوية الأمير عبدالمجيد الأولى 🌿\n\nنذكّركم بسرعة إرفاق شواهد المهمة:\n📌 *${selectedTask.title}*\n${deadlineText}\n\nنأمل من الزملاء الكرام المبادرة برفع الرابط عبر المنصة:\n${namesList}\n\nشاكرين ومقدرين جهودكم المستمرة لخدمة أبنائنا الطلاب وتوثيق الأداء المتميز ✨\nإدارة المدرسة`;
+      const msg = `السلام عليكم ورحمة الله وبركاته، الزملاء الكرام في ثانوية الأمير عبدالمجيد الأولى 🌿\n\nنذكّركم بسرعة إرفاق شواهد المهمة:\n📌 *${selectedTask.title}*\n${deadlineText}\n\nنأمل من الزملاء الكرام المبادرة برفع الرابط عبر المنصة:\n${namesList}\n\nشاكرين ومقدرين جهودكم المستمرة لخدمة أبنائنا الطلاب وتوثيق الأداء المتميز ✨\nإدارة المدرسة`;
 
-    navigator.clipboard.writeText(msg);
-    setCopiedReminder(true);
-    setTimeout(() => setCopiedReminder(false), 3000);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(msg).then(() => {
+          setCopiedReminder(true);
+          setTimeout(() => setCopiedReminder(false), 3000);
+        }).catch(() => {
+          fallbackCopy(msg);
+        });
+      } else {
+        fallbackCopy(msg);
+      }
+    } catch (e) {
+      console.warn('Error in copyLateReminderWhatsApp:', e);
+    }
+  };
+
+  const fallbackCopy = (text: string) => {
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopiedReminder(true);
+      setTimeout(() => setCopiedReminder(false), 3000);
+    } catch (err) {
+      prompt('يرجى نسخ رسالة التذكير يدوياً:', text);
+    }
   };
 
   return (

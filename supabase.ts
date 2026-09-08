@@ -49,16 +49,23 @@ export const clearAuthStorage = () => {
 };
 
 /**
- * تسجيل خروج آمن محلياً يمنع خطأ "Invalid Refresh Token: Refresh Token Not Found"
+ * تسجيل خروج آمن وفوري يمنع التعليق ويمسح التخزين المحلي فوراً
  */
 export const safeSignOut = async () => {
+  // 1. مسح فوري لكافة مفاتيح الجلسة والبروفايل
   try {
-    // نستخدم scope: 'local' حتى لا يفشل الطلب إذا كان رمز التحديث محذوفاً أو غير صالح في الخادم
-    await supabase.auth.signOut({ scope: 'local' });
+    localStorage.removeItem('itqan_active_profile_1448');
+    sessionStorage.removeItem('itqan_demo_user');
+  } catch {}
+  clearAuthStorage();
+
+  // 2. إشعار العميل مع مؤقت زمني صارم (400ms) حتى لا يعلق زر تسجيل الخروج أبداً
+  try {
+    const signOutPromise = supabase.auth.signOut({ scope: 'local' });
+    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 400));
+    await Promise.race([signOutPromise, timeoutPromise]);
   } catch (err) {
-    console.warn('Safe signOut (local error handled):', err);
-  } finally {
-    clearAuthStorage();
+    console.warn('Safe signOut non-blocking:', err);
   }
 };
 

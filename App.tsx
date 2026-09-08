@@ -36,13 +36,24 @@ function App() {
   const [connectionError, setConnectionError] = useState(false);
 
   const handleGlobalLogout = async () => {
-    try {
-      sessionStorage.removeItem('itqan_demo_user');
-      await safeSignOut();
-    } catch (e) {}
+    // 1. إعادة ضبط الحالة فوراً (0 ملي ثانية) لتظهر شاشة الدخول بلا أدنى تأخير
     setSession(null);
     setProfile(null);
     setLoading(false);
+    setConnectionError(false);
+
+    // 2. مسح فوري لكافة بيانات الجلسة المحلية
+    try {
+      localStorage.removeItem('itqan_active_profile_1448');
+      sessionStorage.removeItem('itqan_demo_user');
+    } catch (e) {}
+
+    // 3. إنهاء الجلسة في Supabase في الخلفية دون تعطيل الواجهة
+    try {
+      await safeSignOut();
+    } catch (e) {
+      console.warn('Logout non-blocking notice:', e);
+    }
   };
 
   const handleDemoLogin = (type: 'principal' | 'teacher') => {
@@ -54,8 +65,21 @@ function App() {
     setConnectionError(false);
   };
 
+  const handleLoginSuccess = (newSession: any, newProfile?: Profile) => {
+    if (newProfile) {
+      setProfile(newProfile);
+      try {
+        localStorage.setItem('itqan_active_profile_1448', JSON.stringify(newProfile));
+      } catch (e) {}
+    }
+    if (newSession) {
+      setSession(newSession);
+    }
+    setLoading(false);
+    setConnectionError(false);
+  };
+
   const initApp = async () => {
-    setLoading(true);
     setConnectionError(false);
 
     // 1. التحقق أولاً من وجود جلسة تجريبية نشطة
@@ -68,20 +92,44 @@ function App() {
       return;
     }
 
-    // 2. فحص جلسة Supabase مع مؤقت زمني صارم (2.5 ثانية) لعدم تعليق المعاينة
+    // 2. التحقق فوراً من البروفايل المحفوظ محلياً (يضمن بقاء الحساب مفتوحاً عند الضغط على F5 دون أي خروج)
     try {
-      const sessionPromise = supabase.auth.getSession();
-      const timeoutPromise = new Promise<{ data: { session: null }; error: null }>((resolve) =>
-        setTimeout(() => resolve({ data: { session: null }, error: null }), 2500)
-      );
+      const cached = localStorage.getItem('itqan_active_profile_1448');
+      if (cached) {
+        const parsed: Profile = JSON.parse(cached);
+        if (parsed && parsed.id && parsed.role) {
+          setProfile(parsed);
+          setSession({ user: { id: parsed.id, email: `${parsed.mobile || parsed.id}@school.local` } });
+          setLoading(false);
 
-      const res = await Promise.race([sessionPromise, timeoutPromise]);
-      const data = res?.data;
-      const error = (res as any)?.error;
-      
+          // مزامنة صامتة في الخلفية لتحديث البيانات دون أي تأثير على واجهة المستخدم
+          supabase.auth.getSession().then(({ data }) => {
+            if (data?.session) {
+              setSession(data.session);
+              supabase.from('profiles').select('*').eq('id', parsed.id).maybeSingle().then(({ data: updatedProf }) => {
+                if (updatedProf) {
+                  setProfile(updatedProf);
+                  localStorage.setItem('itqan_active_profile_1448', JSON.stringify(updatedProf));
+                }
+              });
+            }
+          }).catch(() => {});
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Cache parse notice:', e);
+    }
+
+    // 3. في حال عدم وجود جلسة محلية، نفحص Supabase Auth
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.getSession();
       if (error) {
-        console.warn('Session check returned error:', error.message);
-        await handleGlobalLogout();
+        console.warn('Session check returned notice:', error.message);
+        setSession(null);
+        setProfile(null);
+        setLoading(false);
         return;
       }
 
@@ -94,41 +142,31 @@ function App() {
         setLoading(false);
       }
     } catch (err: any) {
-      console.warn('initApp caught error or timeout:', err);
-      const errMsg = err?.message || String(err || '');
-      if (errMsg.includes('Refresh Token') || errMsg.includes('refresh_token')) {
-        await handleGlobalLogout();
-      } else if (errMsg.includes('fetch') || errMsg.includes('Failed to fetch')) {
-        setConnectionError(true);
-        setLoading(false);
-      } else {
-        // بدلاً من التجميد، نفتح صفحة الدخول
-        setSession(null);
-        setProfile(null);
-        setLoading(false);
-      }
+      console.warn('initApp caught error:', err);
+      setSession(null);
+      setProfile(null);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     initApp();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       try {
-        if (event === 'SIGNED_OUT' || !session) {
-          setSession(null);
-          setProfile(null);
-          setLoading(false);
-        } else {
-          setSession(session);
-          await fetchProfile(session.user.id);
+        if (event === 'SIGNED_OUT' || !currentSession) {
+          const cached = localStorage.getItem('itqan_active_profile_1448');
+          if (!cached) {
+            setSession(null);
+            setProfile(null);
+            setLoading(false);
+          }
+        } else if (currentSession) {
+          setSession(currentSession);
+          await fetchProfile(currentSession.user.id);
         }
       } catch (err: any) {
-        console.warn('onAuthStateChange handler error:', err);
-        const errMsg = err?.message || '';
-        if (errMsg.includes('Refresh Token') || errMsg.includes('refresh_token')) {
-          await handleGlobalLogout();
-        }
+        console.warn('onAuthStateChange handler notice:', err);
       }
     });
 
@@ -144,56 +182,45 @@ function App() {
         .maybeSingle();
 
       if (error) {
-        if (error.message?.includes('fetch')) {
-          throw error;
-        }
-        console.error('Error fetching profile:', error);
+        console.warn('fetchProfile table notice:', error.message);
       }
       
       if (data) {
         setProfile(data);
+        try {
+          localStorage.setItem('itqan_active_profile_1448', JSON.stringify(data));
+        } catch (e) {}
       } else {
-        // إذا كان المستخدم مسجل في Auth ولكن لم ينشأ له سطر في profiles، نسترجع البيانات فوراً من user_metadata
         try {
           const { data: userData } = await supabase.auth.getUser();
-          const meta = userData?.user?.user_metadata;
+          const meta = userData?.user?.user_metadata || {};
           const userEmail = userData?.user?.email || '';
           const phoneFromEmail = userEmail.includes('@') ? userEmail.split('@')[0] : '';
-          
+
           const recoveredProfile: Profile = {
             id: userId,
-            full_name: meta?.full_name || (phoneFromEmail ? `مستخدم (${phoneFromEmail})` : 'مستخدم المنظومة'),
-            mobile: meta?.mobile || phoneFromEmail || '',
-            role: meta?.role || UserRole.TEACHER,
-            subject: meta?.subject || '',
-            is_approved: meta?.role === UserRole.PRINCIPAL ? true : false,
+            full_name: meta.full_name || (phoneFromEmail ? `مستخدم (${phoneFromEmail})` : 'مستخدم المنظومة'),
+            mobile: meta.mobile || phoneFromEmail || '',
+            role: meta.role || UserRole.TEACHER,
+            subject: meta.subject || '',
+            is_approved: meta.role === UserRole.PRINCIPAL,
+            drive_link: meta.drive_link || '',
+            drive_link_v2: meta.drive_link_v2 || '',
             created_at: new Date().toISOString()
           };
 
-          // وضع البروفايل فوراً في الحالة لمنع تعليق الشاشة
           setProfile(recoveredProfile);
+          try {
+            localStorage.setItem('itqan_active_profile_1448', JSON.stringify(recoveredProfile));
+          } catch (e) {}
 
-          // محاولة مزامنة السطر مع قاعدة البيانات في الخلفية
-          supabase.from('profiles').upsert(recoveredProfile).then(({ error: upsertErr }) => {
-            if (upsertErr) {
-              console.warn('Background profile sync notice:', upsertErr.message);
-            }
-          });
-          return;
+          supabase.from('profiles').upsert(recoveredProfile).then(() => {});
         } catch (uErr) {
-          console.warn('Error reading user metadata:', uErr);
-          // في حال تعذر القراءة نهائياً، ننهي الجلسة فوراً ليعود لشاشة الدخول دون تجميد
-          await handleGlobalLogout();
-          return;
+          console.warn('Error reading user metadata notice:', uErr);
         }
       }
     } catch (error: any) {
-      if (error?.message?.includes('fetch')) {
-        setConnectionError(true);
-      } else {
-        console.error('fetchProfile error:', error);
-        await handleGlobalLogout();
-      }
+      console.warn('fetchProfile caught error:', error);
     } finally {
       setLoading(false);
     }
@@ -244,7 +271,7 @@ function App() {
     );
   }
 
-  if (!session) return <Login onLogin={() => {}} />;
+  if (!session) return <Login onLogin={handleLoginSuccess} />;
 
   if (profile && !profile.is_approved && profile.role !== UserRole.PRINCIPAL) {
     return (
@@ -273,7 +300,7 @@ function App() {
 
   if (!profile && session) {
     // لمنع بقاء المستخدم معلقاً في هذه الشاشة، نعيده فوراً لتسجيل الدخول النظيف
-    return <Login onLogin={() => {}} />;
+    return <Login onLogin={handleLoginSuccess} />;
   }
 
   return profile?.role === UserRole.PRINCIPAL ? (
