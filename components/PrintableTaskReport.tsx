@@ -60,9 +60,9 @@ export const PrintableTaskReport: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-cairo text-right" dir="rtl">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[200] flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-cairo text-right print:static print:bg-white print:p-0 print:overflow-visible print:block printable-modal-overlay" dir="rtl">
       {/* Floating Action Bar (Hidden on Print) */}
-      <div className="fixed top-4 left-4 right-4 z-50 flex justify-between items-center bg-white/95 backdrop-blur-md px-6 py-3 rounded-2xl shadow-xl border border-slate-200 print:hidden max-w-5xl mx-auto">
+      <div className="fixed top-4 left-4 right-4 z-50 flex justify-between items-center bg-white/95 backdrop-blur-md px-6 py-3 rounded-2xl shadow-xl border border-slate-200 print:hidden max-w-5xl mx-auto no-print">
         <div className="flex items-center gap-3">
           <span className="text-sm font-black text-slate-800">معاينة التقرير الإشرافي للطباعة (A4)</span>
           <span className="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full font-bold">
@@ -88,25 +88,28 @@ export const PrintableTaskReport: React.FC<Props> = ({
       </div>
 
       {/* The Printable Page Canvas */}
-      <div className="bg-white w-full max-w-5xl min-h-[90vh] my-16 print:my-0 p-8 md:p-12 rounded-3xl shadow-2xl print:shadow-none print:rounded-none print:w-full print:p-6 text-slate-900 border print:border-none border-slate-200">
+      <div className="printable-area bg-white w-full max-w-5xl min-h-[90vh] my-16 print:my-0 p-8 md:p-12 rounded-3xl shadow-2xl print:shadow-none print:rounded-none print:w-full print:p-2 text-slate-900 border print:border-none border-slate-200">
         {/* Official Header */}
-        <div className="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-6">
+        <div className="flex justify-between items-start border-b-2 border-slate-800 pb-5 mb-6">
           <div className="text-right space-y-1 text-xs md:text-sm font-black text-slate-800">
             <p>المملكة العربية السعودية</p>
             <p>وزارة التعليم</p>
             <p>الإدارة العامة للتعليم بمحافظة جدة</p>
-            <p className="text-emerald-800">ثانوية الأمير عبدالمجيد الأولى</p>
+            <p className="text-emerald-800 font-black">ثانوية الأمير عبدالمجيد الأولى</p>
             <p className="text-[11px] text-slate-500 font-bold">العام الدراسي: 1448هـ</p>
           </div>
 
-          <div className="text-center space-y-2">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-[#0f4c4c]/5 border border-[#0f4c4c]/20 flex items-center justify-center text-[#0f4c4c] font-black text-2xl">
-              1448
-            </div>
+          <div className="text-center space-y-1.5 flex flex-col items-center">
+            <img 
+              src="/moe_logo.png" 
+              onError={(e) => { e.currentTarget.src = "https://up6.cc/2026/01/176840436497671.png"; }}
+              className="h-14 md:h-16 object-contain mx-auto drop-shadow-xs" 
+              alt="شعار وزارة التعليم" 
+            />
             <h1 className="text-base md:text-lg font-black text-slate-900">
               كشف حصر ومتابعة تسليمات المهام والشواهد
             </h1>
-            <p className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full inline-block">
+            <p className="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-0.5 rounded-full inline-block border border-slate-200">
               {filterTitle}
             </p>
           </div>
@@ -222,24 +225,14 @@ export const PrintableTaskReport: React.FC<Props> = ({
         </div>
 
         {/* Official Footer and Signatures */}
-        <div className="grid grid-cols-3 gap-6 pt-6 border-t-2 border-slate-800 text-center text-xs font-black text-slate-800">
-          <div className="space-y-6">
-            <p>إعداد وتوثيق الحصر</p>
-            <p className="text-slate-500 font-bold">وكيل الشؤون التعليمية</p>
-            <div className="h-10 border-b border-dotted border-slate-400 w-32 mx-auto" />
-          </div>
-
-          <div className="space-y-4">
-            <p>الختم الرسمي للمدرسة</p>
-            <div className="w-24 h-24 rounded-full border-2 border-dashed border-slate-300 mx-auto flex items-center justify-center text-[10px] text-slate-300">
-              ختم المدرسة
+        <div className="pt-6 border-t-2 border-slate-800 flex justify-end">
+          <div className="text-center min-w-[240px] space-y-3">
+            <p className="text-xs font-black text-slate-900">يعتمد مدير المدرسة</p>
+            <p className="text-sm font-black text-[#0f4c4c]">{effectivePrincipalName}</p>
+            <div className="pt-6">
+              <div className="border-b border-dotted border-slate-400 w-44 mx-auto" />
+              <p className="text-[10px] text-slate-400 font-bold mt-1">التوقيع والاعتماد</p>
             </div>
-          </div>
-
-          <div className="space-y-6">
-            <p>يعتمد مدير المدرسة</p>
-            <p className="text-emerald-900 font-black">{effectivePrincipalName}</p>
-            <div className="h-10 border-b border-dotted border-slate-400 w-32 mx-auto" />
           </div>
         </div>
 
