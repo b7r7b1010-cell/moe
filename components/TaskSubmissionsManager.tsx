@@ -6,14 +6,16 @@ import {
   isStaffTargetedByTask, 
   TARGET_ROLE_OPTIONS, 
   generateSafeUUID, 
-  withTimeout 
+  withTimeout,
+  isTaskExpired
 } from '../lib/taskHelpers';
 import { PrintableTaskReport } from './PrintableTaskReport';
 import { 
   ClipboardList, Plus, Calendar, Clock, CheckCircle2, 
   AlertCircle, ExternalLink, MessageSquare, Send, Trash2, 
   Users, Check, X, RefreshCw, Copy, ChevronDown, ChevronUp,
-  FolderCheck, Sparkles, Filter, Smartphone, CheckCheck, Printer, Search
+  FolderCheck, Sparkles, Filter, Smartphone, CheckCheck, Printer, Search,
+  Lock, AlertTriangle
 } from 'lucide-react';
 
 interface TaskSubmissionsManagerProps {
@@ -27,10 +29,11 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'pending' | 'approved' | 'rejected'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'resubmitted' | 'approved' | 'rejected' | 'pending'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [subjectFilter, setSubjectFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<'status' | 'name' | 'subject'>('status');
   const [showPrintReport, setShowPrintReport] = useState(false);
   const [copiedReminder, setCopiedReminder] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -356,25 +359,28 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
     const taskSubs = submissions.filter(s => s.task_id === taskId);
     const submittedCount = taskSubs.filter(s => s.drive_link && s.status !== 'pending').length;
     const approvedCount = taskSubs.filter(s => s.status === 'approved').length;
+    const resubmittedCount = taskSubs.filter(s => s.status === 'resubmitted').length;
+    const rejectedCount = taskSubs.filter(s => s.status === 'rejected').length;
     const pendingCount = Math.max(0, assignedStaff.length - submittedCount);
     const percent = assignedStaff.length > 0 ? Math.round((submittedCount / assignedStaff.length) * 100) : 0;
 
-    return { total: assignedStaff.length, submittedCount, approvedCount, pendingCount, percent };
+    return { total: assignedStaff.length, submittedCount, approvedCount, resubmittedCount, rejectedCount, pendingCount, percent };
   };
 
-  const currentStats = selectedTask ? getTaskStats(selectedTask.id) : { total: 0, submittedCount: 0, approvedCount: 0, pendingCount: 0, percent: 0 };
+  const currentStats = selectedTask ? getTaskStats(selectedTask.id) : { total: 0, submittedCount: 0, approvedCount: 0, resubmittedCount: 0, rejectedCount: 0, pendingCount: 0, percent: 0 };
 
   // Filtered staff for submission table with multi-factor sorting & search
   const getFilteredStaffForTask = () => {
     if (!selectedTask) return [];
 
-    return targetStaff.filter(teacher => {
+    const filtered = targetStaff.filter(teacher => {
       const sub = submissions.find(s => s.task_id === selectedTask.id && s.teacher_id === teacher.id);
       const isSubmitted = !!sub?.drive_link;
       const status = sub?.status || 'pending';
 
       // 1. Status Filter
-      if (statusFilter === 'submitted' && (!isSubmitted || status === 'approved')) return false;
+      if (statusFilter === 'submitted' && status !== 'submitted') return false;
+      if (statusFilter === 'resubmitted' && status !== 'resubmitted') return false;
       if (statusFilter === 'approved' && status !== 'approved') return false;
       if (statusFilter === 'rejected' && status !== 'rejected') return false;
       if (statusFilter === 'pending' && (isSubmitted && status !== 'pending')) return false;
@@ -396,15 +402,42 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
       return true;
     });
+
+    // Sort the list based on selected criterion
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'name') {
+        return (a.full_name || '').localeCompare(b.full_name || '', 'ar');
+      }
+      if (sortBy === 'subject') {
+        return (a.subject || '').localeCompare(b.subject || '', 'ar');
+      }
+      // 'status' priority: resubmitted (attention needed) -> submitted -> rejected -> pending -> approved
+      const statusPriority: Record<string, number> = {
+        resubmitted: 1,
+        submitted: 2,
+        rejected: 3,
+        pending: 4,
+        approved: 5
+      };
+      const subA = submissions.find(s => s.task_id === selectedTask.id && s.teacher_id === a.id);
+      const subB = submissions.find(s => s.task_id === selectedTask.id && s.teacher_id === b.id);
+      const statA = subA?.status || 'pending';
+      const statB = subB?.status || 'pending';
+      const pA = statusPriority[statA] || 99;
+      const pB = statusPriority[statB] || 99;
+      if (pA !== pB) return pA - pB;
+      return (a.full_name || '').localeCompare(b.full_name || '', 'ar');
+    });
   };
 
   // Human-readable title for the print sheet depending on active filter
   const getPrintFilterTitle = () => {
     const parts: string[] = [];
     if (statusFilter === 'pending') parts.push('حصر المتأخرين عن تسليم الشاهد');
-    else if (statusFilter === 'approved') parts.push('كشف التسليمات المعتمدة رسمياً');
-    else if (statusFilter === 'submitted') parts.push('كشف التسليمات قيد المراجعة');
-    else if (statusFilter === 'rejected') parts.push('كشف التسليمات المطلوب تعديلها');
+    else if (statusFilter === 'approved') parts.push('كشف التسليمات المعتمدة رسمياً 🔒');
+    else if (statusFilter === 'resubmitted') parts.push('كشف التسليمات المعاد إرسالها بعد التعديل 🔄');
+    else if (statusFilter === 'submitted') parts.push('كشف التسليمات بانتظار الاعتماد');
+    else if (statusFilter === 'rejected') parts.push('كشف التسليمات المطلوب تعديلها ⚠️');
     else parts.push('كشف المتابعة الشامل للتسليمات');
 
     if (roleFilter !== 'all') parts.push(`فئة: ${roleFilter}`);
@@ -649,20 +682,24 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
           </div>
 
           {/* كروت الإحصائيات الفرعية لهذه المهمة */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center">
-              <p className="text-xs font-bold text-slate-400">إجمالي المطلوب منهم</p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+              <p className="text-xs font-bold text-slate-400">إجمالي المطلوب</p>
               <p className="text-2xl font-black text-slate-800">{currentStats.total}</p>
             </div>
-            <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-center">
-              <p className="text-xs font-bold text-blue-600">قاموا بالتسليم</p>
+            <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-center">
+              <p className="text-xs font-bold text-blue-600">بانتظار الاعتماد</p>
               <p className="text-2xl font-black text-blue-700">{currentStats.submittedCount}</p>
             </div>
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
-              <p className="text-xs font-bold text-emerald-600">تم اعتمادهم</p>
+            <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-center">
+              <p className="text-xs font-bold text-indigo-600">معاد بعد التعديل 🔄</p>
+              <p className="text-2xl font-black text-indigo-700">{currentStats.resubmittedCount}</p>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
+              <p className="text-xs font-bold text-emerald-600">معتمد ومغلق 🔒</p>
               <p className="text-2xl font-black text-emerald-700">{currentStats.approvedCount}</p>
             </div>
-            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-center">
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-center col-span-2 sm:col-span-1">
               <p className="text-xs font-bold text-rose-600">لم يسلموا بعد</p>
               <p className="text-2xl font-black text-rose-700">{currentStats.pendingCount}</p>
             </div>
@@ -670,13 +707,13 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
           {/* شريط الفرز والبحث المتقدم الشامل للمدير */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               {/* حقل البحث السريع بالاسم أو التخصص أو الهاتف */}
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
                 <input
                   type="text"
-                  placeholder="بحث سريع باسم المعلم أو التخصص..."
+                  placeholder="بحث باسم المعلم أو التخصص..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-3 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none focus:border-[#0f4c4c] bg-white"
@@ -698,7 +735,7 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
                   onChange={(e) => setSubjectFilter(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold outline-none focus:border-[#0f4c4c] bg-white"
                 >
-                  <option value="all">كافة التخصصات والمواد ({availableSubjects.length})</option>
+                  <option value="all">كافة التخصصات ({availableSubjects.length})</option>
                   {availableSubjects.map(sub => (
                     <option key={sub} value={sub}>{sub}</option>
                   ))}
@@ -720,21 +757,35 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
                   <option value={UserRole.LAB_ASSISTANT}>محضر مختبر</option>
                 </select>
               </div>
+
+              {/* ترتيب وفرز النتائج */}
+              <div>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-black text-[#0f4c4c] outline-none focus:border-[#0f4c4c] bg-white"
+                >
+                  <option value="status">فرز حسب: الأولوية والحالة ⚡</option>
+                  <option value="name">فرز حسب: اسم المعلم (أبجدياً)</option>
+                  <option value="subject">فرز حسب: التخصص والمادة</option>
+                </select>
+              </div>
             </div>
 
             {/* أزرار تصفية حالة التسليم */}
             <div className="flex items-center gap-2 overflow-x-auto pt-1">
               {[
                 { id: 'all', label: `الكل (${targetStaff.length})` },
-                { id: 'submitted', label: `بانتظار المراجعة (${Math.max(0, currentStats.submittedCount - currentStats.approvedCount)})` },
-                { id: 'approved', label: `المعتمدون (${currentStats.approvedCount})` },
-                { id: 'rejected', label: `طلب تعديل` },
+                { id: 'resubmitted', label: `أُعيد بعد التعديل (${currentStats.resubmittedCount}) 🔄` },
+                { id: 'submitted', label: `بانتظار المراجعة (${currentStats.submittedCount})` },
+                { id: 'approved', label: `المعتمدون 🔒 (${currentStats.approvedCount})` },
+                { id: 'rejected', label: `مطلوب تعديلها (${currentStats.rejectedCount})` },
                 { id: 'pending', label: `المتأخرون عن التسليم (${currentStats.pendingCount})` },
               ].map(f => (
                 <button
                   key={f.id}
                   onClick={() => setStatusFilter(f.id as any)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
                     statusFilter === f.id
                       ? 'bg-[#0f4c4c] text-white shadow-xs'
                       : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
@@ -778,6 +829,7 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
                   const isSubmitted = !!sub?.drive_link;
                   const status = sub?.status || 'pending';
                   const isActing = actionLoadingId === teacher.id;
+                  const isExpired = isTaskExpired(selectedTask.due_date);
 
                   return (
                     <tr key={teacher.id} className="hover:bg-slate-50/70 transition">
@@ -788,8 +840,13 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
                       <td className="py-4 px-3 whitespace-nowrap">
                         {status === 'approved' && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">
-                            <Check className="w-3.5 h-3.5" /> معتمد
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <Lock className="w-3.5 h-3.5 text-emerald-700" /> معتمد ومغلق 🔒
+                          </span>
+                        )}
+                        {status === 'resubmitted' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-indigo-100 text-indigo-800 border border-indigo-200 animate-pulse">
+                            <RefreshCw className="w-3.5 h-3.5 text-indigo-600 animate-spin" /> أُعيد بعد التعديل 🔄
                           </span>
                         )}
                         {status === 'submitted' && (
@@ -799,19 +856,24 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
                         )}
                         {status === 'rejected' && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800">
-                            <AlertCircle className="w-3.5 h-3.5" /> يحتاج تعديل
+                            <AlertCircle className="w-3.5 h-3.5" /> يحتاج تعديل المعلم
                           </span>
                         )}
-                        {status === 'pending' && (
+                        {status === 'pending' && !isExpired && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
                             لم يسلم بعد
+                          </span>
+                        )}
+                        {status === 'pending' && isExpired && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-500" /> فات موعد التسليم
                           </span>
                         )}
                       </td>
 
                       <td className="py-4 px-3">
                         {isSubmitted ? (
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             <a
                               href={sub.drive_link}
                               target="_blank"
@@ -821,8 +883,13 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
                               <ExternalLink className="w-3.5 h-3.5" /> فتح ملف الشاهد
                             </a>
                             {sub.teacher_notes && (
-                              <p className="text-[11px] text-slate-400 italic max-w-xs truncate" title={sub.teacher_notes}>
-                                ملاحظة المعلم: {sub.teacher_notes}
+                              <p className={`text-[11px] p-1.5 rounded-md max-w-xs ${
+                                status === 'resubmitted' 
+                                  ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold' 
+                                  : 'text-slate-500 italic bg-slate-50'
+                              }`} title={sub.teacher_notes}>
+                                <span className="font-black">ملاحظة المعلم: </span>
+                                {sub.teacher_notes}
                               </p>
                             )}
                           </div>
@@ -834,7 +901,7 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
                       <td className="py-4 px-3">
                         <input
                           type="text"
-                          placeholder={sub?.principal_feedback ? `الحالي: ${sub.principal_feedback}` : 'اكتب ملاحظة أو توجيه للمعلم...'}
+                          placeholder={sub?.principal_feedback ? `الحالي: ${sub.principal_feedback}` : 'اكتب توجيه أو سبب طلب التعديل...'}
                           value={feedbackInputs[teacher.id] !== undefined ? feedbackInputs[teacher.id] : (sub?.principal_feedback || '')}
                           onChange={(e) => setFeedbackInputs({ ...feedbackInputs, [teacher.id]: e.target.value })}
                           className="w-full max-w-xs text-xs p-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-[#0f4c4c] outline-none font-bold"
@@ -843,23 +910,36 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
 
                       <td className="py-4 px-3 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5">
-                          <button
-                            disabled={!isSubmitted || isActing}
-                            onClick={() => handleUpdateSubmissionStatus(sub?.id || null, selectedTask.id, teacher.id, 'approved')}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1 shadow-sm"
-                            title="اعتماد الشاهد"
-                          >
-                            <Check className="w-3.5 h-3.5" /> اعتماد
-                          </button>
+                          {status === 'approved' ? (
+                            <button
+                              disabled={isActing}
+                              onClick={() => handleUpdateSubmissionStatus(sub?.id || null, selectedTask.id, teacher.id, 'rejected')}
+                              className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1"
+                              title="إلغاء الاعتماد وطلب تعديل من المعلم"
+                            >
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-600" /> فتح لطلب تعديل
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                disabled={!isSubmitted || isActing}
+                                onClick={() => handleUpdateSubmissionStatus(sub?.id || null, selectedTask.id, teacher.id, 'approved')}
+                                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1 shadow-sm"
+                                title="اعتماد الشاهد وإغلاق التعديل نهائياً على المعلم"
+                              >
+                                <Check className="w-3.5 h-3.5" /> اعتماد 🔒
+                              </button>
 
-                          <button
-                            disabled={!isSubmitted || isActing}
-                            onClick={() => handleUpdateSubmissionStatus(sub?.id || null, selectedTask.id, teacher.id, 'rejected')}
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 disabled:opacity-40 px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1"
-                            title="طلب تعديل الشاهد"
-                          >
-                            <X className="w-3.5 h-3.5" /> تعديل
-                          </button>
+                              <button
+                                disabled={!isSubmitted || isActing}
+                                onClick={() => handleUpdateSubmissionStatus(sub?.id || null, selectedTask.id, teacher.id, 'rejected')}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 disabled:opacity-40 px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-1"
+                                title="إرسال طلب تعديل للمعلم ليتمكن من التعديل وإعادة الإرسال"
+                              >
+                                <X className="w-3.5 h-3.5" /> طلب تعديل
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

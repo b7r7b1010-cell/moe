@@ -72,7 +72,7 @@ export interface SchoolTask {
   created_at: string;
 }
 
-export type SubmissionStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
+export type SubmissionStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'resubmitted';
 
 export interface TaskSubmission {
   id: string;

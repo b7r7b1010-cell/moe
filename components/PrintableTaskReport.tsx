@@ -6,7 +6,7 @@ import { printElementViaIsolatedFrame } from '../lib/printReportHelper';
 import { 
   Printer, X, CheckCircle2, Clock, AlertCircle, Search, Filter, 
   CheckSquare, Square, Eye, EyeOff, LayoutGrid, FileText, Check, 
-  ExternalLink, Sparkles, ChevronDown, Award
+  ExternalLink, Sparkles, ChevronDown, Award, Lock, RefreshCw
 } from 'lucide-react';
 
 interface Props {
@@ -51,12 +51,13 @@ export const PrintableTaskReport: React.FC<Props> = ({
   const [currentTask, setCurrentTask] = useState<SchoolTask>(initialTask);
   const [reportMode, setReportMode] = useState<'single' | 'matrix'>('single');
 
-  // Search & Filters inside Print Center
+  // Search, Sort & Filters inside Print Center
   const [taskSearchQuery, setTaskSearchQuery] = useState('');
   const [teacherSearchQuery, setTeacherSearchQuery] = useState('');
-  const [submissionFilter, setSubmissionFilter] = useState<'all' | 'submitted' | 'missing'>('all');
+  const [submissionFilter, setSubmissionFilter] = useState<'all' | 'approved' | 'resubmitted' | 'submitted' | 'missing'>('all');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedRole, setSelectedRole] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'subject' | 'status'>('name');
 
   // Multi-selection of teachers (which teachers are selected to print)
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<Record<string, boolean>>({});
@@ -67,9 +68,9 @@ export const PrintableTaskReport: React.FC<Props> = ({
     { id: 'name', label: 'اسم المعلم / المكلف', enabled: true },
     { id: 'subject', label: 'التخصص / المادة', enabled: true },
     { id: 'role', label: 'الوظيفة التعليمية', enabled: true },
-    { id: 'status', label: 'حالة التسليم (✓ / ✗)', enabled: true },
+    { id: 'status', label: 'حالة التسليم والاعتماد', enabled: true },
     { id: 'date', label: 'تاريخ ووقت التسليم', enabled: true },
-    { id: 'notes', label: 'رابط الشاهد / الملاحظات', enabled: true },
+    { id: 'notes', label: 'رابط الشاهد وملاحظات المعلم', enabled: true },
     { id: 'approval', label: 'توجيه واعتماد الإدارة', enabled: false },
     { id: 'signature', label: 'توقيع المعلم / الاستلام', enabled: true },
   ]);
@@ -114,9 +115,12 @@ export const PrintableTaskReport: React.FC<Props> = ({
     return taskTargetStaff.filter(teacher => {
       const sub = submissions.find(s => s.task_id === currentTask.id && s.teacher_id === teacher.id);
       const hasSubmitted = !!(sub?.drive_link && sub?.status !== 'pending');
+      const status = sub?.status || 'pending';
 
       // Status filter
-      if (submissionFilter === 'submitted' && !hasSubmitted) return false;
+      if (submissionFilter === 'approved' && status !== 'approved') return false;
+      if (submissionFilter === 'resubmitted' && status !== 'resubmitted') return false;
+      if (submissionFilter === 'submitted' && status !== 'submitted') return false;
       if (submissionFilter === 'missing' && hasSubmitted) return false;
 
       // Subject filter
@@ -148,24 +152,51 @@ export const PrintableTaskReport: React.FC<Props> = ({
     return filteredStaffList.filter(t => selectedTeacherIds[t.id] !== false).length;
   }, [filteredStaffList, selectedTeacherIds]);
 
-  // Staff items to actually render in the printable report
+  // Staff items to actually render in the printable report with robust multi-criteria sorting
   const printItems = useMemo(() => {
-    return filteredStaffList
+    const items = filteredStaffList
       .filter(t => selectedTeacherIds[t.id] !== false)
       .map(teacher => {
         const sub = submissions.find(s => s.task_id === currentTask.id && s.teacher_id === teacher.id);
         return { teacher, submission: sub };
       });
-  }, [filteredStaffList, selectedTeacherIds, submissions, currentTask]);
+
+    return [...items].sort((a, b) => {
+      if (sortBy === 'name') {
+        return (a.teacher.full_name || '').localeCompare(b.teacher.full_name || '', 'ar');
+      }
+      if (sortBy === 'subject') {
+        const cmp = (a.teacher.subject || '').localeCompare(b.teacher.subject || '', 'ar');
+        if (cmp !== 0) return cmp;
+        return (a.teacher.full_name || '').localeCompare(b.teacher.full_name || '', 'ar');
+      }
+      // 'status' sort priority: resubmitted -> submitted -> rejected -> pending -> approved
+      const statusPriority: Record<string, number> = {
+        resubmitted: 1,
+        submitted: 2,
+        rejected: 3,
+        pending: 4,
+        approved: 5
+      };
+      const statA = a.submission?.status || 'pending';
+      const statB = b.submission?.status || 'pending';
+      const pA = statusPriority[statA] || 99;
+      const pB = statusPriority[statB] || 99;
+      if (pA !== pB) return pA - pB;
+      return (a.teacher.full_name || '').localeCompare(b.teacher.full_name || '', 'ar');
+    });
+  }, [filteredStaffList, selectedTeacherIds, submissions, currentTask, sortBy]);
 
   // Stats for the active printable selection
   const activeStats = useMemo(() => {
     const total = printItems.length;
     const submittedCount = printItems.filter(i => i.submission?.drive_link && i.submission?.status !== 'pending').length;
     const approvedCount = printItems.filter(i => i.submission?.status === 'approved').length;
+    const resubmittedCount = printItems.filter(i => i.submission?.status === 'resubmitted').length;
+    const rejectedCount = printItems.filter(i => i.submission?.status === 'rejected').length;
     const pendingCount = total - submittedCount;
     const percent = total > 0 ? Math.round((submittedCount / total) * 100) : 0;
-    return { total, submittedCount, approvedCount, pendingCount, percent };
+    return { total, submittedCount, approvedCount, resubmittedCount, rejectedCount, pendingCount, percent };
   }, [printItems]);
 
   // Quick multi-selection actions
@@ -368,31 +399,61 @@ export const PrintableTaskReport: React.FC<Props> = ({
                 <Filter className="w-3.5 h-3.5" /> الفرز حسب:
               </span>
 
-              <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200">
+              <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200 overflow-x-auto">
                 <button
                   onClick={() => setSubmissionFilter('all')}
-                  className={`px-3 py-1 rounded-lg font-bold text-[11px] transition ${
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition whitespace-nowrap ${
                     submissionFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   الكل ({taskTargetStaff.length})
                 </button>
                 <button
-                  onClick={() => setSubmissionFilter('submitted')}
-                  className={`px-3 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 ${
-                    submissionFilter === 'submitted' ? 'bg-emerald-700 text-white' : 'text-emerald-700 hover:bg-emerald-50'
+                  onClick={() => setSubmissionFilter('approved')}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 whitespace-nowrap ${
+                    submissionFilter === 'approved' ? 'bg-emerald-800 text-white' : 'text-emerald-800 hover:bg-emerald-50'
                   }`}
                 >
-                  <Check className="w-3 h-3 stroke-[3]" /> أرسلوا فقط
+                  <Lock className="w-3 h-3" /> معتمد ومغلق
+                </button>
+                <button
+                  onClick={() => setSubmissionFilter('resubmitted')}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 whitespace-nowrap ${
+                    submissionFilter === 'resubmitted' ? 'bg-indigo-700 text-white' : 'text-indigo-700 hover:bg-indigo-50'
+                  }`}
+                >
+                  <RefreshCw className="w-3 h-3" /> معاد بعد التعديل
+                </button>
+                <button
+                  onClick={() => setSubmissionFilter('submitted')}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 whitespace-nowrap ${
+                    submissionFilter === 'submitted' ? 'bg-blue-700 text-white' : 'text-blue-700 hover:bg-blue-50'
+                  }`}
+                >
+                  <Check className="w-3 h-3 stroke-[3]" /> قيد المراجعة
                 </button>
                 <button
                   onClick={() => setSubmissionFilter('missing')}
-                  className={`px-3 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition flex items-center gap-1 whitespace-nowrap ${
                     submissionFilter === 'missing' ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'
                   }`}
                 >
-                  <X className="w-3 h-3 stroke-[3]" /> لم يرسلوا فقط
+                  <X className="w-3 h-3 stroke-[3]" /> لم يرسلوا
                 </button>
+              </div>
+
+              {/* Sorting Dropdown */}
+              <div className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-bold">الترتيب:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'name' | 'subject' | 'status')}
+                  className="bg-transparent text-slate-800 font-bold text-[11px] focus:outline-hidden cursor-pointer"
+                >
+                  <option value="name">اسم المعلم (أبجدياً)</option>
+                  <option value="subject">التخصص / المادة</option>
+                  <option value="status">الأولوية وحالة التسليم</option>
+                </select>
               </div>
 
               {/* Subject Filter */}
@@ -410,7 +471,7 @@ export const PrintableTaskReport: React.FC<Props> = ({
               )}
 
               {/* Teacher Search */}
-              <div className="relative w-44">
+              <div className="relative w-40">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2" />
                 <input
                   type="text"
@@ -429,13 +490,13 @@ export const PrintableTaskReport: React.FC<Props> = ({
               </span>
               <button
                 onClick={handleSelectAll}
-                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold transition"
+                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
               >
                 تحديد الكل
               </button>
               <button
                 onClick={handleDeselectAll}
-                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold transition"
+                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
               >
                 إلغاء التحديد
               </button>
@@ -532,20 +593,30 @@ export const PrintableTaskReport: React.FC<Props> = ({
                 </div>
 
                 {/* Quick Stats Grid */}
-                <div className="flex items-center gap-2 md:gap-3 shrink-0">
-                  <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 text-center min-w-[70px]">
+                <div className="flex flex-wrap items-center gap-2 md:gap-2.5 shrink-0">
+                  <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 text-center min-w-[65px]">
                     <span className="text-[10px] text-slate-500 block font-bold">المستهدفون</span>
                     <span className="text-sm font-black text-slate-800">{activeStats.total}</span>
                   </div>
-                  <div className="bg-white px-3 py-2 rounded-xl border border-emerald-200 text-center min-w-[70px]">
-                    <span className="text-[10px] text-emerald-600 block font-bold">أرسلوا (✓)</span>
-                    <span className="text-sm font-black text-emerald-700">{activeStats.submittedCount}</span>
+                  <div className="bg-white px-2.5 py-1.5 rounded-xl border border-emerald-300 text-center min-w-[65px]">
+                    <span className="text-[10px] text-emerald-800 block font-bold">معتمد 🔒</span>
+                    <span className="text-sm font-black text-emerald-800">{activeStats.approvedCount}</span>
                   </div>
-                  <div className="bg-white px-3 py-2 rounded-xl border border-rose-200 text-center min-w-[70px]">
+                  {activeStats.resubmittedCount > 0 && (
+                    <div className="bg-white px-2.5 py-1.5 rounded-xl border border-indigo-300 text-center min-w-[65px]">
+                      <span className="text-[10px] text-indigo-700 block font-bold">مُعاد 🔄</span>
+                      <span className="text-sm font-black text-indigo-700">{activeStats.resubmittedCount}</span>
+                    </div>
+                  )}
+                  <div className="bg-white px-2.5 py-1.5 rounded-xl border border-blue-200 text-center min-w-[65px]">
+                    <span className="text-[10px] text-blue-700 block font-bold">مرسل (✓)</span>
+                    <span className="text-sm font-black text-blue-800">{activeStats.submittedCount}</span>
+                  </div>
+                  <div className="bg-white px-2.5 py-1.5 rounded-xl border border-rose-200 text-center min-w-[65px]">
                     <span className="text-[10px] text-rose-600 block font-bold">لم يرسلوا (✗)</span>
                     <span className="text-sm font-black text-rose-700">{activeStats.pendingCount}</span>
                   </div>
-                  <div className="bg-[#0f4c4c] text-white px-3.5 py-2 rounded-xl text-center min-w-[75px]">
+                  <div className="bg-[#0f4c4c] text-white px-3 py-1.5 rounded-xl text-center min-w-[70px]">
                     <span className="text-[10px] text-emerald-200 block font-bold">نسبة الإنجاز</span>
                     <span className="text-sm font-black">{activeStats.percent}%</span>
                   </div>
@@ -651,13 +722,28 @@ export const PrintableTaskReport: React.FC<Props> = ({
                               </td>
                             )}
 
-                            {/* Status: Explicit ✓ / ✗ */}
+                            {/* Status: Explicit with professional tags */}
                             {columns.find(c => c.id === 'status')?.enabled && (
                               <td className="py-2 px-3 text-center border-l border-slate-200 whitespace-nowrap">
-                                {isSubmitted ? (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-300">
-                                    <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-600" />
-                                    {isApproved ? 'معتمد' : 'تم الإرسال'}
+                                {item.submission?.status === 'approved' ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-900 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                                    <Lock className="w-3 h-3 text-emerald-700" />
+                                    معتمد ومغلق 🔒
+                                  </span>
+                                ) : item.submission?.status === 'resubmitted' ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-900 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-300">
+                                    <RefreshCw className="w-3 h-3 text-indigo-600" />
+                                    معاد بعد التعديل 🔄
+                                  </span>
+                                ) : item.submission?.status === 'rejected' ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-900 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300">
+                                    <AlertCircle className="w-3 h-3 text-amber-600" />
+                                    مطلوب تعديل ⚠️
+                                  </span>
+                                ) : isSubmitted ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-blue-900 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-300">
+                                    <Check className="w-3.5 h-3.5 stroke-[3] text-blue-600" />
+                                    تم الإرسال (قيد المراجعة)
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-300">
@@ -768,14 +854,27 @@ export const PrintableTaskReport: React.FC<Props> = ({
                               );
                             }
 
+                            const status = sub?.status;
                             return (
                               <td key={t.id} className="py-1.5 px-2 text-center border-l border-slate-200">
-                                {isSubmitted ? (
-                                  <span className="inline-block text-emerald-700 font-black text-xs">
+                                {status === 'approved' ? (
+                                  <span className="inline-flex items-center justify-center text-emerald-800 font-black text-xs gap-0.5" title="معتمد ومغلق">
+                                    ✓ <Lock className="w-2.5 h-2.5 text-emerald-700 inline" />
+                                  </span>
+                                ) : status === 'resubmitted' ? (
+                                  <span className="inline-flex items-center justify-center text-indigo-700 font-black text-xs gap-0.5" title="معاد بعد التعديل">
+                                    ✓ <RefreshCw className="w-2.5 h-2.5 text-indigo-600 inline" />
+                                  </span>
+                                ) : status === 'rejected' ? (
+                                  <span className="inline-block text-amber-600 font-black text-xs" title="مطلوب تعديل">
+                                    ⚠️
+                                  </span>
+                                ) : isSubmitted ? (
+                                  <span className="inline-block text-blue-700 font-black text-xs" title="تم الإرسال قيد المراجعة">
                                     ✓
                                   </span>
                                 ) : (
-                                  <span className="inline-block text-rose-600 font-black text-xs">
+                                  <span className="inline-block text-rose-600 font-black text-xs" title="لم يتم الإرسال">
                                     ✗
                                   </span>
                                 )}

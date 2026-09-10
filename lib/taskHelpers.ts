@@ -88,6 +88,35 @@ export const withTimeout = <T>(promise: Promise<T>, timeoutMs = 2500): Promise<T
 };
 
 /**
+ * Determines whether a task's due date has strictly passed.
+ * Returns true only if a valid due_date string is provided and the current time is past 23:59:59 of that date.
+ */
+export const isTaskExpired = (dueDate?: string): boolean => {
+  if (!dueDate || !dueDate.trim()) return false;
+  try {
+    const trimmed = dueDate.trim();
+    const parts = trimmed.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        const deadline = new Date(year, month, day, 23, 59, 59, 999);
+        return new Date() > deadline;
+      }
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      d.setHours(23, 59, 59, 999);
+      return new Date() > d;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+};
+
+/**
  * Predefined target role options for the Principal when creating a task.
  */
 export const TARGET_ROLE_OPTIONS = [
