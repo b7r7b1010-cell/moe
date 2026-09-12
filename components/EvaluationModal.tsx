@@ -3,7 +3,6 @@ import { Profile, Evaluation, UserRole, EvaluationPeriod, SchoolTask, TaskSubmis
 import { CRITERIA_MAP } from '../constants';
 import { supabase } from '../supabase';
 import { isStaffTargetedByTask, withTimeout } from '../lib/taskHelpers';
-import { INITIAL_SCHOOL_TASKS } from '../lib/schoolTasksData';
 import { 
   X, Save, ExternalLink, 
   Award, Lightbulb, Info, Sparkles, FileText, Calculator, Folder, 
@@ -55,7 +54,13 @@ const EvaluationModal: React.FC<Props> = ({ staff, initialPeriod = 'midterm', on
 
       if (allTasks.length === 0) {
         const localTasks = localStorage.getItem('local_school_tasks_1448');
-        allTasks = localTasks ? JSON.parse(localTasks) : INITIAL_SCHOOL_TASKS;
+        if (localTasks) {
+          try {
+            allTasks = JSON.parse(localTasks);
+          } catch (e) {
+            allTasks = [];
+          }
+        }
       }
 
       // Filter tasks targeting this staff member

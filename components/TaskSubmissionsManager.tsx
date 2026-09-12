@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Profile, SchoolTask, TaskSubmission, UserRole } from '../types';
-import { INITIAL_SCHOOL_TASKS } from '../lib/schoolTasksData';
 import { 
   isStaffTargetedByTask, 
   TARGET_ROLE_OPTIONS, 
@@ -86,14 +85,21 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
           supabase.from('tasks').select('*').order('created_at', { ascending: false }),
           3500
         );
-        if (!tasksError && tasksData && tasksData.length > 0) {
+        if (!tasksError && tasksData) {
           loadedTasks = tasksData;
+          try {
+            localStorage.setItem('local_school_tasks_1448', JSON.stringify(tasksData));
+          } catch {}
+        } else {
+          const localTasks = localStorage.getItem('local_school_tasks_1448');
+          if (localTasks) {
+            try {
+              loadedTasks = JSON.parse(localTasks);
+            } catch (e) {}
+          }
         }
       } catch (err) {
         console.warn('Tasks remote fetch timeout/error, trying local fallback:', err);
-      }
-
-      if (loadedTasks.length === 0) {
         const localTasks = localStorage.getItem('local_school_tasks_1448');
         if (localTasks) {
           try {
@@ -102,17 +108,13 @@ export const TaskSubmissionsManager: React.FC<TaskSubmissionsManagerProps> = ({ 
         }
       }
 
-      if (loadedTasks.length === 0) {
-        loadedTasks = INITIAL_SCHOOL_TASKS;
-        localStorage.setItem('local_school_tasks_1448', JSON.stringify(INITIAL_SCHOOL_TASKS));
-        try {
-          withTimeout(supabase.from('tasks').upsert(INITIAL_SCHOOL_TASKS), 2500).catch(() => {});
-        } catch (e) {}
-      }
-
       setTasks(loadedTasks);
-      if (loadedTasks.length > 0 && !selectedTaskId) {
-        setSelectedTaskId(loadedTasks[0].id);
+      if (loadedTasks.length > 0) {
+        if (!selectedTaskId || !loadedTasks.some(t => t.id === selectedTaskId)) {
+          setSelectedTaskId(loadedTasks[0].id);
+        }
+      } else {
+        setSelectedTaskId(null);
       }
 
       // 2. Fetch submissions with timeout

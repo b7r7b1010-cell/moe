@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { Profile, SchoolTask, TaskSubmission, SubmissionStatus } from '../types';
-import { INITIAL_SCHOOL_TASKS } from '../lib/schoolTasksData';
 import { isStaffTargetedByTask, generateSafeUUID, withTimeout, isTaskExpired } from '../lib/taskHelpers';
 import { 
   ClipboardList, ExternalLink, Send, CheckCircle2, 
@@ -20,11 +19,8 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
   const [loading, setLoading] = useState(true);
   const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
 
-  // Dedicated Top Form State for adding task link
+  // Currently active/highlighted task
   const [selectedTaskForSubmission, setSelectedTaskForSubmission] = useState<string>('');
-  const [dedicatedLink, setDedicatedLink] = useState<string>('');
-  const [dedicatedNote, setDedicatedNote] = useState<string>('');
-  const [isSubmittingDedicated, setIsSubmittingDedicated] = useState<boolean>(false);
   const [submissionSuccessMsg, setSubmissionSuccessMsg] = useState<string | null>(null);
 
   // Per-card input state for inline updates
@@ -65,28 +61,22 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      let activeTasks = tasksData || [];
+      let activeTasks: SchoolTask[] = [];
 
-      // If database returned 0 tasks or error, fallback to local storage or initial defaults
-      if (!activeTasks || activeTasks.length === 0) {
+      // If database query succeeded, database is strictly authoritative (even if 0 tasks)
+      if (!tasksError && tasksData) {
+        activeTasks = tasksData;
+        try {
+          localStorage.setItem('local_school_tasks_1448', JSON.stringify(tasksData));
+        } catch {}
+      } else {
+        // Fallback to local storage ONLY in case of offline/network errors
         const localTasksStr = localStorage.getItem('local_school_tasks_1448');
         if (localTasksStr) {
           try {
             activeTasks = JSON.parse(localTasksStr).filter((t: SchoolTask) => t.is_active);
           } catch (e) {
             activeTasks = [];
-          }
-        }
-
-        // If still empty, use INITIAL_SCHOOL_TASKS so the view is never empty!
-        if (activeTasks.length === 0) {
-          activeTasks = INITIAL_SCHOOL_TASKS;
-          localStorage.setItem('local_school_tasks_1448', JSON.stringify(INITIAL_SCHOOL_TASKS));
-          // Try to persist initial tasks to Supabase if possible
-          try {
-            await supabase.from('tasks').upsert(INITIAL_SCHOOL_TASKS);
-          } catch (e) {
-            // silent ignore
           }
         }
       }
@@ -96,8 +86,12 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
       setTasks(relevantTasks);
 
       // Auto-select first task in the submission dropdown if not selected
-      if (relevantTasks.length > 0 && !selectedTaskForSubmission) {
-        setSelectedTaskForSubmission(relevantTasks[0].id);
+      if (relevantTasks.length > 0) {
+        if (!selectedTaskForSubmission || !relevantTasks.some(t => t.id === selectedTaskForSubmission)) {
+          setSelectedTaskForSubmission(relevantTasks[0].id);
+        }
+      } else {
+        setSelectedTaskForSubmission('');
       }
 
       // 2. Fetch my submissions
@@ -129,60 +123,31 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
       setLinks(prev => ({ ...initialLinks, ...prev }));
       setNotes(prev => ({ ...initialNotes, ...prev }));
 
-      // Set initial values for top form based on first task
-      if (relevantTasks.length > 0 && initialLinks[relevantTasks[0].id]) {
-        setDedicatedLink(initialLinks[relevantTasks[0].id]);
-        setDedicatedNote(initialNotes[relevantTasks[0].id] || '');
-      }
-
     } catch (e) {
-      console.warn('Teacher tasks fetch fallback:', e);
-      setTasks(INITIAL_SCHOOL_TASKS);
+      console.warn('Teacher tasks fetch fallback note:', e);
+      try {
+        const localTasksStr = localStorage.getItem('local_school_tasks_1448');
+        if (localTasksStr) {
+          const parsed = JSON.parse(localTasksStr).filter((t: SchoolTask) => t.is_active);
+          const relevant = parsed.filter((t: SchoolTask) => isStaffTargetedByTask(userProfile, t));
+          setTasks(relevant);
+        } else {
+          setTasks([]);
+        }
+      } catch {
+        setTasks([]);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // When teacher selects a different task in the top dropdown
-  const handleTaskSelectionChange = (taskId: string) => {
+  // Scroll directly to a selected task card and highlight it
+  const scrollToTask = (taskId: string) => {
     setSelectedTaskForSubmission(taskId);
-    const existing = submissions.find(s => s.task_id === taskId);
-    setDedicatedLink(existing?.drive_link || links[taskId] || '');
-    setDedicatedNote(existing?.teacher_notes || notes[taskId] || '');
-  };
-
-  // Dedicated Top Submission Handler
-  const handleDedicatedSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const link = dedicatedLink.trim();
-    if (!link) {
-      alert('الرجاء إدخال رابط الشاهد (Google Drive أو OneDrive أو رابط ملف الشواهد) أولاً.');
-      return;
-    }
-
-    if (!link.startsWith('http://') && !link.startsWith('https://')) {
-      alert('الرجاء إدخال رابط صحيح يبدأ بـ https://');
-      return;
-    }
-
-    let targetTaskId = selectedTaskForSubmission;
-    if (!targetTaskId) {
-      alert('الرجاء اختيار المهمة المستهدفة من القائمة أولاً.');
-      return;
-    }
-
-    setIsSubmittingDedicated(true);
-
-    try {
-      // Save submission optimistically & sync
-      await saveSubmissionData(targetTaskId, link, dedicatedNote);
-      setSubmissionSuccessMsg('تم تسليم رابط الشاهد لمدير المدرسة بنجاح! تظهر الآن في حساب الإدارة للاعتماد.');
-      setTimeout(() => setSubmissionSuccessMsg(null), 6000);
-    } catch (e: any) {
-      console.error(e);
-      alert('تم حفظ رابط المهمة وسيتم تحديثه في حساب الإدارة المدرسية.');
-    } finally {
-      setIsSubmittingDedicated(false);
+    const element = document.getElementById(`task-card-${taskId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   };
 
@@ -306,6 +271,8 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
     setSubmittingTaskId(taskId);
     try {
       await saveSubmissionData(taskId, link, notes[taskId] || '');
+      setSubmissionSuccessMsg('✅ تم تسليم رابط المهمة بنجاح! سيتم إشعار مدير المدرسة بمراجعتها.');
+      setTimeout(() => setSubmissionSuccessMsg(null), 5000);
       alert('✅ تم تسليم رابط المهمة بنجاح! سيتم إشعار مدير المدرسة بمراجعتها.');
     } catch (e: any) {
       alert('خطأ أثناء التسليم: ' + e.message);
@@ -316,13 +283,6 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
 
   const completedCount = submissions.filter(s => s.drive_link).length;
   const approvedCount = submissions.filter(s => s.status === 'approved').length;
-
-  const currentSelectedSubmission = submissions.find(s => s.task_id === selectedTaskForSubmission);
-  const selectedTaskObj = tasks.find(t => t.id === selectedTaskForSubmission);
-  const isSelectedTaskApproved = currentSelectedSubmission?.status === 'approved';
-  const isSelectedTaskExpired = isTaskExpired(selectedTaskObj?.due_date) && (!currentSelectedSubmission?.drive_link || currentSelectedSubmission.status === 'pending');
-  const isSelectedTaskNeedsRevision = currentSelectedSubmission?.status === 'rejected';
-  const isSelectedTaskResubmitted = currentSelectedSubmission?.status === 'resubmitted';
 
   return (
     <div className="space-y-8 text-right font-cairo" dir="rtl">
@@ -338,7 +298,7 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
           </div>
           <h2 className="text-2xl md:text-3xl font-black">المهام والمحطات المجدولة</h2>
           <p className="text-emerald-100/80 text-sm max-w-2xl leading-relaxed">
-            المتطلبات التي حددتها إدارة المدرسة خلال الفصل الدراسي (الخطط، الاختبارات التشخيصية، الشواهد الدورية). قم بإرفاق روابط الشواهد ليتم اعتمادها.
+            المتطلبات التي حددتها إدارة المدرسة خلال الفصل الدراسي (الخطط، الاختبارات التشخيصية، الشواهد الدورية). قم بإرفاق روابط الشواهد في بطاقة كل مهمة أدناه ليتم اعتمادها.
           </p>
         </div>
 
@@ -359,301 +319,97 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 2. الصندوق الرئيسي المباشر: مكان إضافة رابط المهمة التي أرسلها المدير */}
-      {/* ========================================================================= */}
-      <div className={`bg-white rounded-[2.5rem] p-6 md:p-8 shadow-xl border-2 relative overflow-hidden transition-all ${
-        isSelectedTaskApproved 
-          ? 'border-emerald-500/50 bg-emerald-50/10' 
-          : isSelectedTaskNeedsRevision
-            ? 'border-amber-400 ring-2 ring-amber-400/20'
-            : isSelectedTaskExpired
-              ? 'border-rose-300 bg-rose-50/20'
-              : 'border-emerald-500/30'
-      }`}>
-        {/* خلفية جمالية خفيفة */}
-        <div className="absolute top-0 left-0 w-40 h-40 bg-emerald-50 rounded-full blur-3xl -z-10"></div>
-
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-slate-100">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black ${
-                isSelectedTaskApproved 
-                  ? 'bg-emerald-100 text-emerald-800' 
-                  : isSelectedTaskNeedsRevision 
-                    ? 'bg-amber-100 text-amber-800' 
-                    : 'bg-emerald-100 text-emerald-800'
-              }`}>
-                {isSelectedTaskApproved ? (
-                  <Lock className="w-5 h-5 text-emerald-700" />
-                ) : (
-                  <LinkIcon className="w-5 h-5" />
-                )}
-              </div>
-              <h3 className="text-xl font-black text-slate-900">
-                مكان إضافة رابط المهمة التي أرسلها المدير
-              </h3>
-            </div>
-            <p className="text-xs text-slate-500 font-bold mr-11">
-              اختر المهمة المطلوبة من القائمة وضع رابط مجلد الشاهد ليتم رفعه واعتماده من قبل الإدارة المدرسية.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {isSelectedTaskApproved && (
-              <span className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 px-3.5 py-1.5 rounded-full text-xs font-black border border-emerald-300 shadow-sm">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" /> معتمدة رسمياً — السجل مقفل 🔒
-              </span>
-            )}
-            {isSelectedTaskResubmitted && (
-              <span className="inline-flex items-center gap-1.5 bg-indigo-100 text-indigo-800 px-3.5 py-1.5 rounded-full text-xs font-black border border-indigo-200">
-                <RefreshCw className="w-4 h-4 text-indigo-600" /> تم التعديل - بانتظار اعتماد المدير 🔄
-              </span>
-            )}
-            {isSelectedTaskNeedsRevision && (
-              <span className="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 px-3.5 py-1.5 rounded-full text-xs font-black border border-amber-300 animate-pulse">
-                <AlertTriangle className="w-4 h-4 text-amber-600" /> مطلوب تعديل من المدير ⚠️
-              </span>
-            )}
-            {!isSelectedTaskApproved && !isSelectedTaskNeedsRevision && !isSelectedTaskResubmitted && currentSelectedSubmission?.status === 'submitted' && (
-              <span className="inline-flex items-center gap-1.5 bg-blue-100 text-blue-800 px-3.5 py-1.5 rounded-full text-xs font-black border border-blue-200">
-                <Clock className="w-4 h-4 text-blue-600" /> تم التسليم - بانتظار مراجعة المدير
-              </span>
-            )}
-            {isSelectedTaskExpired && (
-              <span className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-800 px-3.5 py-1.5 rounded-full text-xs font-black border border-rose-200">
-                <Lock className="w-4 h-4 text-rose-600" /> انتهت مهلة التسليم
-              </span>
-            )}
-          </div>
+      {/* تنبيه النجاح اللحظي */}
+      {submissionSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-200 text-emerald-900 text-sm font-bold flex items-center gap-3 shadow-sm">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{submissionSuccessMsg}</span>
         </div>
+      )}
 
-        {/* نموذج الإضافة المباشر */}
-        <form onSubmit={handleDedicatedSubmit} className="pt-6 space-y-5">
-          
-          {/* تنبيه الاعتماد الرسمي والقفل */}
-          {isSelectedTaskApproved && (
-            <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-200 text-emerald-950 text-xs font-bold flex items-center gap-3">
-              <ShieldCheck className="w-6 h-6 text-emerald-600 shrink-0" />
-              <div>
-                <p className="font-black text-emerald-900 text-sm">🔒 هذه المهمة معتمدة رسمياً من قبل مدير المدرسة</p>
-                <p className="text-emerald-700 text-[11px] mt-0.5 leading-relaxed">
-                  تم إقفال إمكانية التعديل أو رفع ملفات أخرى حفاظاً على موثوقية السجلات بعد الاعتماد.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* تنبيه انتهاء المهلة النظامية */}
-          {isSelectedTaskExpired && (
-            <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-200 text-rose-950 text-xs font-bold flex items-center gap-3">
-              <AlertCircle className="w-6 h-6 text-rose-600 shrink-0" />
-              <div>
-                <p className="font-black text-rose-900 text-sm">⏰ انتهت المهلة النظامية المحددة لتسليم الشواهد</p>
-                <p className="text-rose-700 text-[11px] mt-0.5 leading-relaxed">
-                  تاريخ نهاية هذه المهمة كان ({selectedTaskObj?.due_date}). لا يمكن استقبال شواهد جديدة بعد انتهاء الموعد المحدد.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* تنبيه وتوجيه المدير عند طلب التعديل */}
-          {isSelectedTaskNeedsRevision && (
-            <div className="p-5 rounded-2xl bg-gradient-to-l from-amber-50 to-amber-100/60 border-2 border-amber-300 text-amber-950 text-xs font-bold space-y-2.5 shadow-sm">
-              <div className="flex items-center gap-2 text-amber-900 font-black text-sm">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <span>مطلوب إجراء تعديل من مدير المدرسة:</span>
-              </div>
-              {currentSelectedSubmission?.principal_feedback && (
-                <div className="bg-white/90 p-3.5 rounded-xl border border-amber-200 text-slate-900 text-xs font-bold">
-                  <span className="text-amber-900 font-black">توجيه المدير: </span>
-                  {currentSelectedSubmission.principal_feedback}
+      {/* ========================================================================= */}
+      {/* 2. شريط التوجيه والتنقل السريع بين المهام */}
+      {/* ========================================================================= */}
+      {tasks.length > 0 ? (
+        <div className="bg-white rounded-[2rem] p-6 md:p-7 shadow-sm border border-slate-200/80 space-y-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
+                  <LinkIcon className="w-4 h-4" />
                 </div>
-              )}
-              <p className="text-amber-800 text-[11px] leading-relaxed">
-                💡 <b>إرشاد:</b> تم الاحتفاظ برابط الشاهد المرفوع؛ يمكنك تعديل ملفاتك داخل مجلد Drive مباشرة أو تحديث الرابط هنا، وتدوين توضيحك ثم الضغط على زر <b>(تأكيد إكمال التعديل وإعادة الإرسال للمدير للاعتماد 🔄)</b>.
+                <h3 className="text-base md:text-lg font-black text-slate-800">
+                  دليل تسليم الشواهد والانتقال المباشر للمهام
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 font-bold mr-10">
+                انقر على أي مهمة أدناه للانتقال إليها مباشرة وتعبئة رابط مجلد الشواهد الخاص بها:
               </p>
             </div>
-          )}
 
-          {isSelectedTaskResubmitted && (
-            <div className="p-4 rounded-2xl bg-indigo-50 border-2 border-indigo-200 text-indigo-950 text-xs font-bold flex items-center gap-3">
-              <RefreshCw className="w-5 h-5 text-indigo-600 shrink-0" />
-              <div>
-                <p className="font-black text-indigo-900 text-xs">🔄 تم تسليم التعديلات وهي بانتظار مراجعة واعتماد المدير مجدداً</p>
-                {currentSelectedSubmission?.teacher_notes && (
-                  <p className="text-indigo-700 text-[11px] mt-0.5">ملاحظتك: {currentSelectedSubmission.teacher_notes}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* اختيار المهمة */}
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-700 flex items-center justify-between">
-                <span>المهمة أو المتطلب المستهدف <span className="text-rose-500">*</span></span>
-                <span className="text-[10px] text-slate-400 font-normal">حدد المهمة المعنية</span>
-              </label>
-              <select
-                value={selectedTaskForSubmission}
-                onChange={(e) => handleTaskSelectionChange(e.target.value)}
-                className="w-full p-4 rounded-2xl border-2 border-slate-200 focus:border-[#0f4c4c] outline-none font-bold text-sm bg-slate-50 focus:bg-white text-slate-800 transition"
-              >
-                {tasks.length === 0 ? (
-                  <option value="">لا توجد مهام مسندة حالياً من قبل الإدارة</option>
-                ) : (
-                  tasks.map(task => {
-                    const isExp = isTaskExpired(task.due_date);
-                    const subItem = submissions.find(s => s.task_id === task.id);
-                    return (
-                      <option key={task.id} value={task.id}>
-                        {subItem?.status === 'approved' ? '🔒 ' : ''}
-                        {task.title} 
-                        {task.due_date ? ` (آخر موعد: ${task.due_date}${isExp ? ' - منتهي' : ''})` : ''}
-                      </option>
-                    );
-                  })
-                )}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-700 flex items-center justify-between">
-                <span>ملاحظات وتوضيح المعلم للإدارة (اختياري)</span>
-                <span className="text-[10px] text-slate-400 font-normal">توضيح للإدارة المدرسية</span>
-              </label>
-              <input
-                type="text"
-                placeholder={isSelectedTaskNeedsRevision ? "دوّن هنا ما تم تعديله وفق ملاحظة المدير..." : "مثال: تم إرفاق الخطة كاملة مع نماذج الاختبارات وسلالم التصحيح"}
-                value={dedicatedNote}
-                disabled={isSelectedTaskApproved || isSelectedTaskExpired}
-                onChange={(e) => setDedicatedNote(e.target.value)}
-                className={`w-full p-4 rounded-2xl border-2 outline-none font-bold text-xs transition ${
-                  isSelectedTaskApproved || isSelectedTaskExpired
-                    ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
-                    : 'border-slate-200 focus:border-[#0f4c4c] bg-slate-50 focus:bg-white text-slate-800'
-                }`}
-              />
+            {/* تنبيه صلاحية الرابط */}
+            <div className="bg-emerald-50/80 border border-emerald-200 text-emerald-900 px-4 py-2.5 rounded-2xl text-[11px] font-bold flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>تأكد من ضبط صلاحية الرابط في Google Drive على: <strong>«أي شخص لديه الرابط يمكنه العرض»</strong></span>
             </div>
           </div>
 
-          {/* حقل رابط الشاهد البارز */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                <span>رابط المهمة أو الشاهد (Google Drive / OneDrive)</span>
-                <span className="text-rose-500">*</span>
-              </label>
+          {/* أزرار التنقل السريع بين المهام */}
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+            {tasks.map((task, idx) => {
+              const sub = submissions.find(s => s.task_id === task.id);
+              const isApproved = sub?.status === 'approved';
+              const isRevision = sub?.status === 'rejected';
+              const isResubmitted = sub?.status === 'resubmitted';
+              const isSubmitted = sub?.status === 'submitted';
+              const isExpired = isTaskExpired(task.due_date) && (!sub?.drive_link || sub.status === 'pending');
+              const isSelected = selectedTaskForSubmission === task.id;
 
-              {dedicatedLink && (
-                <a
-                  href={dedicatedLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-600 hover:text-emerald-700 font-bold inline-flex items-center gap-1 text-xs bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 transition"
+              return (
+                <button
+                  key={task.id}
+                  type="button"
+                  onClick={() => scrollToTask(task.id)}
+                  className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 border shadow-sm ${
+                    isSelected
+                      ? 'ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50 text-emerald-900'
+                      : isApproved
+                        ? 'bg-emerald-50/70 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                        : isRevision
+                          ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 animate-pulse'
+                          : isResubmitted
+                            ? 'bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100'
+                            : isSubmitted
+                              ? 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'
+                              : isExpired
+                                ? 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-900'
+                  }`}
                 >
-                  <ExternalLink className="w-3.5 h-3.5" /> فتح وتجربة الرابط الحالي
-                </a>
-              )}
-            </div>
-
-            <div className="relative">
-              <input
-                type="url"
-                placeholder="https://drive.google.com/drive/folders/... أو https://1drv.ms/..."
-                value={dedicatedLink}
-                disabled={isSelectedTaskApproved || isSelectedTaskExpired}
-                onChange={(e) => setDedicatedLink(e.target.value)}
-                required
-                className={`w-full p-4 pl-12 pr-4 rounded-2xl border-2 outline-none font-mono font-bold text-sm text-left dir-ltr shadow-inner transition ${
-                  isSelectedTaskApproved || isSelectedTaskExpired
-                    ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
-                    : 'border-slate-200 focus:border-[#0f4c4c] bg-slate-50 focus:bg-white'
-                }`}
-                dir="ltr"
-              />
-              <LinkIcon className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-            </div>
-
-            <p className="text-[11px] text-slate-400 font-bold flex items-center gap-1">
-              <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              يرجى التأكد من ضبط صلاحية مشاركة المجلد في Google Drive على: <b>«أي شخص لديه الرابط يمكنه العرض»</b>.
-            </p>
+                  <span className="w-5 h-5 rounded-full bg-black/10 flex items-center justify-center text-[10px] font-black">
+                    {idx + 1}
+                  </span>
+                  <span className="truncate max-w-[200px] sm:max-w-xs">{task.title}</span>
+                  {isApproved && <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />}
+                  {isRevision && <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
+                  {isSubmitted && !isApproved && <Clock className="w-3.5 h-3.5 text-blue-600" />}
+                  {!sub?.drive_link && !isExpired && <span className="text-[10px] text-amber-600 font-bold">⏳ بانتظار التسليم</span>}
+                </button>
+              );
+            })}
           </div>
-
-          {/* رسالة النجاح */}
-          {submissionSuccessMsg && (
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>{submissionSuccessMsg}</span>
-            </div>
-          )}
-
-          {/* زر الإرسال المباشر */}
-          <div className="pt-2 flex justify-end">
-            {isSelectedTaskApproved ? (
-              <button
-                type="button"
-                disabled
-                className="w-full sm:w-auto bg-emerald-50 text-emerald-800 border-2 border-emerald-300 px-8 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 cursor-not-allowed"
-              >
-                <Lock className="w-4 h-4 text-emerald-700" />
-                <span>المهمة معتمدة رسمياً — السجل مقفل وغير قابل للتعديل</span>
-              </button>
-            ) : isSelectedTaskExpired ? (
-              <button
-                type="button"
-                disabled
-                className="w-full sm:w-auto bg-slate-100 text-slate-500 border-2 border-slate-300 px-8 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 cursor-not-allowed"
-              >
-                <Lock className="w-4 h-4 text-slate-400" />
-                <span>انتهت المهلة النظامية المحددة للاستقبال ({selectedTaskObj?.due_date})</span>
-              </button>
-            ) : isSelectedTaskNeedsRevision ? (
-              <button
-                type="button"
-                onClick={() => handleConfirmRevision(selectedTaskForSubmission, dedicatedLink, dedicatedNote)}
-                disabled={isSubmittingDedicated}
-                className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 text-white px-8 py-4 rounded-2xl font-black text-sm shadow-xl shadow-amber-600/20 hover:shadow-amber-600/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                {isSubmittingDedicated ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>جاري إعادة الإرسال للمدير...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    <span>تأكيد إكمال التعديل وإعادة الإرسال للمدير للاعتماد 🔄</span>
-                  </>
-                )}
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={isSubmittingDedicated}
-                className="w-full sm:w-auto bg-[#0f4c4c] hover:bg-[#115e59] text-white px-8 py-4 rounded-2xl font-black text-sm shadow-xl shadow-[#0f4c4c]/20 hover:shadow-[#0f4c4c]/30 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                {isSubmittingDedicated ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>جاري تسليم الرابط...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>
-                      {currentSelectedSubmission?.drive_link ? 'تحديث وتأكيد رابط المهمة للإدارة' : 'إرسال رابط المهمة لمدير المدرسة للاعتماد'}
-                    </span>
-                  </>
-                )}
-              </button>
-            )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-[2rem] p-10 text-center border border-slate-200/80 shadow-sm space-y-3">
+          <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto text-slate-400">
+            <ClipboardList className="w-7 h-7" />
           </div>
-
-        </form>
-      </div>
+          <h4 className="text-base font-black text-slate-700">لا توجد مهام أو متطلبات مجدولة حالياً</h4>
+          <p className="text-xs text-slate-500 font-bold max-w-md mx-auto leading-relaxed">
+            لم تقم إدارة المدرسة بإسناد أي مهام فصلية حتى الآن. ستظهر المهام وخانات رفع الشواهد هنا فور إدراجها من قبل مدير المدرسة.
+          </p>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 3. قائمة المهام التفصيلية لكل متطلب */}
@@ -674,6 +430,16 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
             <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-500">جاري تحميل المهام المجدولة...</p>
           </div>
+        ) : tasks.length === 0 ? (
+          <div className="bg-white p-12 rounded-[2rem] text-center border border-slate-200 shadow-sm space-y-3">
+            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 border border-emerald-100">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h4 className="text-lg font-black text-slate-800">قائمة المهام فارغة (0 مهام)</h4>
+            <p className="text-xs text-slate-500 font-bold max-w-md mx-auto leading-relaxed">
+              تم تحديث السجلات بنجاح، ولا توجد مهام أو تكليفات فصلية معتمدة في الوقت الراهن.
+            </p>
+          </div>
         ) : (
           <div className="space-y-6">
             {tasks.map((task, index) => {
@@ -690,13 +456,14 @@ export const TeacherTasksView: React.FC<TeacherTasksViewProps> = ({ userProfile 
               return (
                 <div
                   key={task.id}
+                  id={`task-card-${task.id}`}
                   className={`bg-white rounded-[2rem] p-6 md:p-8 shadow-md border transition-all hover:shadow-lg space-y-6 ${
                     isCardApproved 
                       ? 'border-emerald-200 bg-emerald-50/10'
                       : isCardNeedsRevision
                         ? 'border-amber-300 ring-2 ring-amber-400/20'
                         : selectedTaskForSubmission === task.id 
-                          ? 'border-emerald-500 ring-2 ring-emerald-400/20' 
+                          ? 'border-emerald-500 ring-4 ring-emerald-500/20 shadow-xl' 
                           : 'border-slate-200'
                   }`}
                 >
